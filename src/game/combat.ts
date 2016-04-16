@@ -89,24 +89,23 @@ type AttackCallback = (target: Actor, compliance: Compliance) => void;
  */
 
 class ActionRecord {
-	// The selected action.
-	action: string;
 	// The actor performing the action.
-	source: number;
-	// Whether this action is multiply targeted.
-	isMultiplyTargeted: boolean;
+	source: Actor;
+	// The selected action.
+	action: Action;
 	// Whether the source actor is confused.
 	isConfused: boolean;
 	// The targeted actor, if this is a singly-targeted action.  The
 	// team will also be set.
-	targetActor: number;
+	targetActor: Actor;
 	// The team which is targeted, or if targetInvert is set, the team
 	// which is not targeted.
 	targetTeam: number;
 	// Whether the target set is complemented.
 	targetInvert: boolean;
 
-	constructor(action: string) {
+	constructor(source: Actor, action: Action) {
+		this.source = source;
 		this.action = action;
 	}
 }
@@ -120,8 +119,9 @@ export interface Action {
 	time: number;
 	// Amount of time to cool down after performing the action.
 	cooldown: number;
-	// Perform the action.
-	act(combat: Combat, rec: ActionRecord): void;
+	// Perform the action.  Return true if the action happens, false if
+	// the action fizzles (e.g. no valid targets).
+	act(combat: Combat, rec: ActionRecord): boolean;
 }
 
 export interface ActionMap {
@@ -140,8 +140,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 120,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Fight,
 				damage: 25,
 			});
@@ -152,8 +152,8 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 300,
 		cooldown: 800,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Psychic,
 				effect: 'attackUp',
 			});
@@ -164,8 +164,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 150,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Fight,
 				damage: 25,
 				effect: 'drain',
@@ -177,8 +177,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 300,
 		cooldown: 800,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Psychic,
 				effect: 'frighten',
 			});
@@ -189,8 +189,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 250,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Ground,
 				damage: 30,
 				effect: 'stun',
@@ -202,8 +202,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 500,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Ground,
 				damage: 20,
 			});
@@ -214,8 +214,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 200,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Fire,
 				damage: 20,
 				effect: 'burn',
@@ -227,8 +227,8 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 300,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.NoEvade,
 				effect: 'smoke',
 			});
@@ -240,15 +240,17 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 25,
 		cooldown: 1200,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return false;
+		}
 	},
 	glipLaugh: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 350,
 		cooldown: 900,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Psychic,
 				effect: 'confuse',
 			});
@@ -259,8 +261,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 225,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Magic,
 				damage: 25,
 			})
@@ -271,8 +273,8 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 450,
 		cooldown: 450,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Magic,
 				effect: 'haste',
 			})
@@ -283,8 +285,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 275,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Air,
 			});
 		}
@@ -294,8 +296,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 350,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Air,
 				effect: 'toss',
 			});
@@ -306,8 +308,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 400,
 		cooldown: 700,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Magic,
 				effect: 'darken',
 			});
@@ -318,8 +320,8 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 400,
 		cooldown: 700,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Magic,
 				effect: 'control',
 			});
@@ -330,8 +332,8 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 250,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Blessing,
 				damage: 75,
 			});
@@ -342,8 +344,8 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 250,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(rec, {
+		act: function(combat: Combat, rec: ActionRecord): boolean {
+			return combat.attack(rec, {
 				type: AttackType.Blessing,
 				effect: 'abjure',
 			});
@@ -356,7 +358,9 @@ const MissingAction: Action = {
 	hostile: false,
 	time: 200,
 	cooldown: 200,
-	act: function(combat: Combat, rec: ActionRecord) {}
+	act: function(combat: Combat, rec: ActionRecord) {
+		return true;
+	}
 };
 
 function getAction(name: string): Action {
@@ -732,6 +736,11 @@ export class Actor {
 		}
 		this.persistentEffects.push(fx);
 	}
+
+	// Test whether the actor is a valid attack target.
+	isValidTarget(): boolean {
+		return (this.status & Status.Dead) == 0;
+	}
 }
 
 // Adjust damage according to target compliance.
@@ -780,127 +789,107 @@ export class Combat {
 
 	// Update one step of combat.
 	update(): void {
-		var active: Actor = null;
-		for (var actor of this.actors) {
-			actor.update();
-			if (!actor.time && !active) {
-				active = actor;
+		var actor: Actor = null;
+		for (var a of this.actors) {
+			a.update();
+			if (!a.time && !actor) {
+				actor = a;
 			}
 		}
-		if (active) {
-			var rec = active.action;
+		if (actor) {
+			var rec = actor.action;
 			if (rec) {
-				var actionType = getAction(rec.action);
-				active.action = null;
-				active.time = actionType.cooldown;
-				actionType.act(this, rec);
+				var action = rec.action;
+				actor.action = null;
+				if (action.act(this, rec)) {
+					actor.time = action.cooldown;
+				} else {
+					actor.time = 50;
+				}
 			} else {
-				switch (active.control) {
+				switch (actor.control) {
 				case Control.Computer:
-					this.computerAction(active);
+					rec = this.computerAction(actor);
 					break;
 				}
-				if (!active.action) {
+				if (!rec) {
 					console.warn('No action selected');
-					active.action = new ActionRecord('');
+					rec = new ActionRecord(actor, MissingAction);
 				}
-				active.time = getAction(active.action.action).time;
+				actor.action = rec;
+				actor.time = rec.action.time;
 			}
 		}
 	}
 
 	// Have the computer choose an action for the given actor.
-	computerAction(actor: Actor): void {
+	computerAction(actor: Actor): ActionRecord {
 		var shape = Shapes[actor.shape];
 		if (!shape) {
-			return;
+			return null;
 		}
 		var actName = randomTri(shape.actions);
 		if (!actName) {
-			return;
+			return null;
 		}
 		var actionType = Actions[actName];
 		if (!actionType) {
-			return;
+			return null;
 		}
-		var rec = new ActionRecord(actName);
-		rec.source = actor.index;
-		rec.isMultiplyTargeted = actionType.targeting !== Targeting.Single;
+		var rec = new ActionRecord(actor, getAction(actName));
 		rec.isConfused = false;
 		rec.targetActor = null;
 		rec.targetTeam = actor.team;
 		rec.targetInvert = actionType.hostile;
-		actor.action = rec;
+		return rec;
 	}
 
-	/*
-	 * Select all allies on the given team.
-	 */
-	allies(team: number): number[] {
-		return this.selectActors((a: Actor) => a.baseTeam === team);
-	}
-
-	/*
-	 * Select all enemies of the given team.
-	 */
-	enemies(team: number): number[] {
-		return this.selectActors((a: Actor) => a.baseTeam !== team);
-	}
-
-	/*
-	 * Select everybody, all actors.
-	 */
-	everybody(): number[] {
-		return this.selectActors((a) => true);
-	}
-
-	/*
-	 * Select a list of actors meeting the given criterion.
-	 */
-	selectActors(pred: (a: Actor) => boolean): number[] {
-		var list: number[] = [];
-		for (var actor of this.actors) {
-			if (pred(actor)) {
-				list.push(actor.index);
-			}
+	// Find legal targets.  If team is null, then select all valid
+	// targets.  If team is not null, then select targets according to
+	// their team: if invert is false, select targets on that team, if
+	// invert is true, select targets on all other teams.
+	getTargets(team: number, invert: boolean): Actor[] {
+		if (typeof team !== 'number') {
+			return this.actors.filter(
+				(a: Actor) => a.isValidTarget());
 		}
-		return list;
-	}
-
-	/*
-	 * Get the actors on a given team (if invert is false) or the actors
-	 * on all other teams (if invert is true).
-	 */
-	private getTeam(team: number, invert: boolean): Actor[] {
 		if (invert) {
-			return this.actors.filter((a: Actor) => a.baseTeam === team);
+			return this.actors.filter(
+				(a: Actor) => a.baseTeam === team && a.isValidTarget());
 		} else {
-			return this.actors.filter((a: Actor) => a.baseTeam !== team);
+			return this.actors.filter(
+				(a: Actor) => a.baseTeam !== team && a.isValidTarget());
 		}
 	}
 
-	/*
-	 * Get actual targets for an attack.
-	 */
-	getTargets(rec: ActionRecord): Actor[] {
-		if (rec.isMultiplyTargeted) {
-			return this.getTeam(rec.targetTeam, rec.targetInvert);
+	// Get actual targets for an attack.
+	getAttackTargets(rec: ActionRecord): Actor[] {
+		switch (rec.action.targeting) {
+		case Targeting.Multiple:
+			return this.getTargets(rec.targetTeam, rec.targetInvert);
+		case Targeting.Single:
+			var target = rec.targetActor;
+			if (!target) {
+				target = randomUniform(
+					this.getTargets(
+						rec.isConfused ? null : rec.targetTeam,
+						rec.targetInvert));
+			}
+			return target ? [target] : [];
+		default:
+			return [];
 		}
-		var targetActor = rec.targetActor;
-		if (typeof targetActor === 'number') {
-			return [this.actors[targetActor]];
-		}
-		return [randomUniform(
-			rec.isConfused ?
-				this.actors : this.getTeam(rec.targetTeam, rec.targetInvert))];
 	}
 
-	/*
-	 * Perform an attack by an actor against other actors.
-	 */
-	attack(rec: ActionRecord, spec: AttackSpec): void {
-		var source = this.actors[rec.source];
-		var targets = this.getTargets(rec);
+	// Perform an attack by an actor against other actors.  Returns true
+	// if the attack happens, false if it fizzles because there are no
+	// targets.
+	attack(rec: ActionRecord, spec: AttackSpec): boolean {
+		var source = rec.source;
+		var targets = this.getAttackTargets(rec);
+		if (!targets.length) {
+			return false;
+		}
 		for (var target of targets) {
 			var compliance = target.compliance(spec.type);
 			if (compliance === Compliance.Reflect) {
@@ -941,6 +930,7 @@ export class Combat {
 			}
 			target.applyEffects();
 		}
+		return true;
 	}
 }
 
