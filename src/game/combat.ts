@@ -660,7 +660,6 @@ export class Actor {
 	// properties that are out of range.  This is idempotent, it is
 	// called whenever something happens to the actor.
 	applyEffects(): void {
-		this.health = Math.max(0, Math.min(this.baseHealth, this.health));
 		this.control = this.baseControl
 		this.team = this.baseTeam;
 		this.speed = this.baseSpeed;
@@ -711,6 +710,27 @@ export class Actor {
 		var newHealth = Math.max(0, Math.min(this.baseHealth, oldHealth - damage));
 		this.health = newHealth;
 		return newHealth - oldHealth;
+	}
+
+	// Add an effect to the actor.
+	addEffect(effect: string, compliance: Compliance): void {
+		var factory = PersistentEffects[effect];
+		if (!factory) {
+			return;
+		}
+		var fx = factory();
+		if (fx.isHarmful && (this.status & Status.Abjure)) {
+			return;
+		}
+		switch (compliance) {
+		case Compliance.Immune:
+		case Compliance.Resist:
+			return;
+		case Compliance.Vulnerable:
+			fx.time *= 2;
+			break;
+		}
+		this.persistentEffects.push(fx);
 	}
 }
 
@@ -917,22 +937,7 @@ export class Combat {
 					}
 					break;
 				}
-				var fxFactory = PersistentEffects[effect];
-				if (fxFactory) {
-					var fx = fxFactory();
-					if (fx.isHarmful && (target.status & Status.Abjure)) {
-					} else {
-						switch (compliance) {
-						case Compliance.Resist:
-							fx.time *= 0.5;
-							break;
-						case Compliance.Vulnerable:
-							fx.time *= 2;
-							break;
-						}
-						target.persistentEffects.push(fx);
-					}
-				}
+				target.addEffect(effect, compliance);
 			}
 			target.applyEffects();
 		}
