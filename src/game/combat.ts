@@ -45,7 +45,16 @@ export enum Status {
 	LowHealth   = 1 << 1,
 	Darken      = 1 << 2,
 	Abjure      = 1 << 3,
+	AttackUp    = 1 << 4,
+	Confuse     = 1 << 5,
+	Stun        = 1 << 6,
+	Burn        = 1 << 7,
+	Frighten    = 1 << 8,
+	Smoke       = 1 << 9,
+	Haste       = 1 << 10,
 }
+
+const DamageInterval = 10;
 
 /*
  * A character's "compliance" (can't think of a better word) to an
@@ -122,7 +131,7 @@ export interface ActionMap {
 interface AttackSpec {
 	type: AttackType;
 	effect?: string;
-	power?: number;
+	damage?: number;
 }
 
 export const Actions: ActionMap = {
@@ -134,7 +143,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Fight,
-				power: 25,
+				damage: 25,
 			});
 		}
 	},
@@ -158,7 +167,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Fight,
-				power: 25,
+				damage: 25,
 				effect: 'drain',
 			});
 		}
@@ -183,7 +192,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Ground,
-				power: 30,
+				damage: 30,
 				effect: 'stun',
 			});
 		}
@@ -196,7 +205,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Ground,
-				power: 20,
+				damage: 20,
 			});
 		}
 	},
@@ -208,7 +217,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Fire,
-				power: 20,
+				damage: 20,
 				effect: 'burn',
 			});
 		}
@@ -253,7 +262,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Magic,
-				power: 25,
+				damage: 25,
 			})
 		}
 	},
@@ -324,7 +333,7 @@ export const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord) {
 			combat.attack(rec, {
 				type: AttackType.Blessing,
-				power: 75,
+				damage: 75,
 			});
 		}
 	},
@@ -505,12 +514,37 @@ interface PersistentEffect {
 	apply(actor: Actor): void;
 }
 
+// A persistent effect which applies a status flag.
 class StatusEffect implements PersistentEffect {
-	constructor(public status: Status, public isHarmful: boolean,
+	constructor(private status: Status, public isHarmful: boolean,
 							public time: number) {}
 	update(actor: Actor): void {}
 	apply(actor: Actor): void {
-		actor.curStatus |= this.status;
+		actor.status |= this.status;
+	}
+}
+
+// A persistent effect which periodically damages the target.
+class DamageEffect implements PersistentEffect {
+	private tick: number = 0;
+	constructor(
+		private status: Status,
+		public isHarmful: boolean,
+		public time: number,
+		private type: AttackType,
+		private damage: number) {}
+	update(actor: Actor): void {
+		this.tick++;
+		if (this.tick == DamageInterval) {
+			this.tick = 0;
+			actor.damage(
+				adjustDamage(
+					randomDamage(this.damage),
+					actor.compliance(this.type)))
+		}
+	}
+	apply(actor: Actor): void {
+		actor.status |= this.status;
 	}
 }
 
@@ -523,17 +557,16 @@ interface PersistentEffectMap {
 }
 
 const PersistentEffects: PersistentEffectMap = {
-	attackUp: null,
-	defenseDown: null,
+	attackUp: () => new StatusEffect(Status.AttackUp, false, 20),
+	darken: () => new StatusEffect(Status.Darken, true, 20),
 	drain: null,
-	frighten: null,
-	confuse: null,
-	stun: null,
-	burn: null,
-	smoke: null,
-	haste: null,
+	frighten: () => new StatusEffect(Status.Frighten, true, 20),
+	confuse: () => new StatusEffect(Status.Confuse, true, 20),
+	stun: () => new StatusEffect(Status.Stun, true, 5),
+	burn: () => new DamageEffect(Status.Burn, true, 20, AttackType.Fire, 5),
+	smoke: () => new StatusEffect(Status.Smoke, false, 20),
+	haste: () => new StatusEffect(Status.Haste, false, 20),
 	toss: null,
-	darken: null,
 	control: null,
 	abjure: null,
 };
@@ -559,32 +592,28 @@ export class Actor {
 	index: number;
 
 	// The actor's current shape.
-	curShape: string;
-	// The actor's shape last frame.
-	prevShape: string;
+	shape: string;
 
 	// The team that the actor is on.
 	baseTeam: number;
 	// The base team controlling the actor.
 	baseControl: Control;
 	// The team controlling the actor at the moment.
-	curTeam: number;
+	team: number;
 	// The system controlling the actor at the moment.
-	curControl: Control;
+	control: Control;
 
 	// The actor's base (maximum) health.
 	baseHealth: number;
 	// The actor's current health.
-	curHealth: number;
-	// The actor's health last frame.
-	prevHealth: number;
+	health: number;
 
 	// Time remaining until this actor is active.
 	time: number;
 	// The actor's base speed.
 	baseSpeed: number;
 	// The actor's current speed.
-	curSpeed: number;
+	speed: number;
 
 	// The selected action.
 	action: ActionRecord;
@@ -592,36 +621,28 @@ export class Actor {
 	// Active status effects.
 	persistentEffects: PersistentEffect[];
 	// The actor's current status.
-	curStatus: Status;
-	// The actor's status last frame.
-	prevStatus: Status;
+	status: Status;
 
 	constructor(team: number, control: Control, spec: ActorSpec) {
 		this.index = -1;
-		this.curShape = spec.shape;
-		this.prevShape = spec.shape;
+		this.shape = spec.shape;
 		this.baseTeam = team;
 		this.baseControl = control;
-		this.curTeam = team;
-		this.curControl = control;
+		this.team = team;
+		this.control = control;
 		this.baseHealth = spec.health;
-		this.curHealth = spec.health;
-		this.prevHealth = spec.health;
+		this.health = spec.health;
 		this.time = 200;
 		this.baseSpeed = spec.speed;
-		this.curSpeed = spec.speed;
+		this.speed = spec.speed;
 		this.action = null;
 		this.persistentEffects = [];
-		this.curStatus = Status.None;
-		this.prevStatus = Status.None;
+		this.status = Status.None;
 	}
 
 	// Update the actor state.
 	update(): void {
-		this.prevShape = this.curShape;
-		this.prevHealth = this.curHealth;
-		this.prevStatus = this.curStatus;
-		if (this.curStatus & Status.Dead) {
+		if (this.status & Status.Dead) {
 			return;
 		}
 		for (var i = 0, fxs = this.persistentEffects; i < fxs.length;) {
@@ -639,19 +660,25 @@ export class Actor {
 	// properties that are out of range.  This is idempotent, it is
 	// called whenever something happens to the actor.
 	applyEffects(): void {
-		this.curHealth = Math.max(0, Math.min(this.baseHealth, this.curHealth));
-		this.curControl = this.baseControl
-		this.curTeam = this.baseTeam;
-		this.curSpeed = this.baseSpeed;
-		this.curStatus = Status.None;
-		if (this.curHealth === 0) {
-			this.curStatus = Status.Dead;
+		this.health = Math.max(0, Math.min(this.baseHealth, this.health));
+		this.control = this.baseControl
+		this.team = this.baseTeam;
+		this.speed = this.baseSpeed;
+		this.status = Status.None;
+		if (this.health <= 0) {
+			this.status = Status.Dead;
 			this.persistentEffects.length = 0;
-		} else if (this.curHealth < this.baseHealth / 5) {
-			this.curStatus = Status.LowHealth;
+		} else if (this.health < this.baseHealth / 5) {
+			this.status = Status.LowHealth;
 		}
 		for (var fx of this.persistentEffects) {
 			fx.apply(this);
+		}
+		if (this.status & Status.Haste) {
+			this.speed = (this.speed * 1.5) | 0;
+		}
+		if (this.status & Status.Stun) {
+			this.speed = 0;
 		}
 	}
 
@@ -660,8 +687,8 @@ export class Actor {
 		if (type == AttackType.NoEvade) {
 			return Compliance.Normal;
 		}
-		var c = getShape(this.curShape).compliance[type] || Compliance.Normal;
-		if (this.curStatus & Status.Darken) {
+		var c = getShape(this.shape).compliance[type] || Compliance.Normal;
+		if (this.status & Status.Darken) {
 			switch (c) {
 			case Compliance.Normal:
 			case Compliance.Resist:
@@ -676,6 +703,43 @@ export class Actor {
 		}
 		return c;
 	}
+
+	// Damage the actor.  Return the actual amount of damage taken,
+	// excluding any "overkill".
+	damage(damage: number): number {
+		var oldHealth = this.health;
+		var newHealth = Math.max(0, Math.min(this.baseHealth, oldHealth - damage));
+		this.health = newHealth;
+		return newHealth - oldHealth;
+	}
+}
+
+// Adjust damage according to target compliance.
+function adjustDamage(damage: number, compliance: Compliance) {
+	var sign = damage >= 0 ? +1 : -1;
+	switch (compliance) {
+	case Compliance.Normal:
+		break;
+	case Compliance.Resist:
+		damage *= 0.5;
+		break;
+	case Compliance.Vulnerable:
+		damage *= 2;
+		break;
+	case Compliance.Immune:
+		return 0;
+	case Compliance.Absorb:
+		sign = -sign;
+		return 0;
+	}
+	return sign * Math.max(1, damage | 0);
+}
+
+// Adjust damage randomly.
+function randomDamage(damage: number): number {
+	var minDamage = (damage * (2 / 3)) | 0;
+	var maxDamage = (damage * (4 / 3)) | 0;
+	return minDamage + (Math.random() * (maxDamage + 1 - minDamage));
 }
 
 /*
@@ -683,25 +747,6 @@ export class Actor {
  * Combat
  * ===========================================================================
  */
-
-// Calculate attack damage.
-function attackDamage(compliance: Compliance, power: number): number {
-	switch (compliance) {
-	case Compliance.Normal:
-		break;
-	case Compliance.Resist:
-		power *= 0.5;
-		break;
-	case Compliance.Vulnerable:
-		power *= 2;
-		break;
-	case Compliance.Immune:
-		return 0;
-	}
-	var minDmg = (power * (2 / 3)) | 0;
-	var maxDmg = (power * (4 / 3)) | 0;
-	return Math.max(1, minDmg + (Math.random() * (maxDmg + 1 - minDmg)));
-}
 
 // Combat state manager.
 export class Combat {
@@ -730,7 +775,7 @@ export class Combat {
 				active.time = actionType.cooldown;
 				actionType.act(this, rec);
 			} else {
-				switch (active.curControl) {
+				switch (active.control) {
 				case Control.Computer:
 					this.computerAction(active);
 					break;
@@ -746,7 +791,7 @@ export class Combat {
 
 	// Have the computer choose an action for the given actor.
 	computerAction(actor: Actor): void {
-		var shape = Shapes[actor.curShape];
+		var shape = Shapes[actor.shape];
 		if (!shape) {
 			return;
 		}
@@ -763,7 +808,7 @@ export class Combat {
 		rec.isMultiplyTargeted = actionType.targeting !== Targeting.Single;
 		rec.isConfused = false;
 		rec.targetActor = null;
-		rec.targetTeam = actor.curTeam;
+		rec.targetTeam = actor.team;
 		rec.targetInvert = actionType.hostile;
 		actor.action = rec;
 	}
@@ -854,9 +899,9 @@ export class Combat {
 				continue;
 			}
 			var damage = 0;
-			if (typeof spec.power === 'number') {
-				damage = attackDamage(compliance, spec.power);
-				target.curHealth -= damage;
+			if (typeof spec.damage === 'number') {
+				damage = target.damage(
+					adjustDamage(compliance, randomDamage(spec.damage)));
 			}
 			var effect = spec.effect;
 			if (effect && !PersistentEffects.hasOwnProperty(effect)) {
@@ -866,8 +911,8 @@ export class Combat {
 			if (effect) {
 				switch (effect) {
 				case 'drain':
-					if (source !== target) {
-						source.curHealth += damage;
+					if (source !== target && damage !== 0) {
+						source.damage(-damage);
 						source.applyEffects();
 					}
 					break;
@@ -875,7 +920,7 @@ export class Combat {
 				var fxFactory = PersistentEffects[effect];
 				if (fxFactory) {
 					var fx = fxFactory();
-					if (fx.isHarmful && (target.curStatus & Status.Abjure)) {
+					if (fx.isHarmful && (target.status & Status.Abjure)) {
 					} else {
 						switch (compliance) {
 						case Compliance.Resist:
