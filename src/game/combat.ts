@@ -492,20 +492,30 @@ function getShape(name: string): Shape {
  */
 
 // An active persistent effect on an actor.
-abstract class PersistentEffect {
+interface PersistentEffect {
 	// Whether the effect is harmful.
 	isHarmful: boolean;
-	// Update the status effect.  Return true if the effect continues,
-	// false if the effect should be removed.  Called once per frame.
-	abstract update(actor: Actor): boolean;
+	// Time remaining on the effect.
+	time: number;
+	// Update the status effect.  Called once per frame.
+	update(actor: Actor): void;
 	// Apply the status effect to the actor.  This must only modify the
 	// actor's ephemeral properties, to make sure that
 	// Actor.applyEffects() is idempotent.
-	abstract apply(actor: Actor): void;
+	apply(actor: Actor): void;
+}
+
+class StatusEffect implements PersistentEffect {
+	constructor(public status: Status, public isHarmful: boolean,
+							public time: number) {}
+	update(actor: Actor): void {}
+	apply(actor: Actor): void {
+		actor.curStatus |= this.status;
+	}
 }
 
 interface PersistentEffectType {
-	new(compliance: Compliance): PersistentEffect;
+	(): PersistentEffect;
 }
 
 interface PersistentEffectMap {
@@ -615,9 +625,10 @@ export class Actor {
 			return;
 		}
 		for (var i = 0, fxs = this.persistentEffects; i < fxs.length;) {
-			if (fxs[i].update(this)) {
-				i++;
-			} else {
+			var fx = fxs[i];
+			fx.update(this);
+			fx.time--;
+			if (fx.time <= 0) {
 				fxs.splice(i, 1);
 			}
 		}
@@ -861,11 +872,19 @@ export class Combat {
 					}
 					break;
 				}
-				var effectType = PersistentEffects[effect];
-				if (effectType) {
-					var fx = new effectType(compliance);
+				var fxFactory = PersistentEffects[effect];
+				if (fxFactory) {
+					var fx = fxFactory();
 					if (fx.isHarmful && (target.curStatus & Status.Abjure)) {
 					} else {
+						switch (compliance) {
+						case Compliance.Resist:
+							fx.time *= 0.5;
+							break;
+						case Compliance.Vulnerable:
+							fx.time *= 2;
+							break;
+						}
 						target.persistentEffects.push(fx);
 					}
 				}
