@@ -110,7 +110,7 @@ class ActionRecord {
 	}
 }
 
-export interface Action {
+interface Action {
 	// The possible targets for the action.
 	targeting: Targeting;
 	// Whether the action is hostile.
@@ -124,7 +124,7 @@ export interface Action {
 	act(combat: Combat, rec: ActionRecord): boolean;
 }
 
-export interface ActionMap {
+interface ActionMap {
 	[name: string]: Action;
 }
 
@@ -134,7 +134,7 @@ interface AttackSpec {
 	damage?: number;
 }
 
-export const Actions: ActionMap = {
+const Actions: ActionMap = {
 	wereSlash: {
 		targeting: Targeting.Single,
 		hostile: true,
@@ -383,18 +383,18 @@ function getAction(name: string): Action {
  * associated powers and attributes.
  */
 
-export interface ComplianceMap {
+interface ComplianceMap {
 	[type: number]: Compliance;
 }
 
-export interface Shape {
+interface Shape {
 	// List of actions that this shape can perform.
 	actions: string[];
 	// Compliance to different damage types.
 	compliance: ComplianceMap;
 }
 
-export interface ShapeMap {
+interface ShapeMap {
 	[name: string]: Shape;
 }
 
@@ -424,7 +424,7 @@ function mkCompliance(info?: CMBuilder) {
 	return map;
 }
 
-export const Shapes: ShapeMap = {
+const Shapes: ShapeMap = {
 	were: {
 		actions: ['wereSlash', 'wereHowl'],
 		compliance: mkCompliance({
@@ -497,6 +497,9 @@ function getShape(name: string): Shape {
 	console.warn('Invalid shape: ' + name);
 	return MissingShape;
 }
+
+export const ShapeNames: string[] = Object.keys(Shapes);
+ShapeNames.sort();
 
 /*
  * ===========================================================================
@@ -789,7 +792,7 @@ export interface TeamCount {
 export class Combat {
 	actors: Actor[] = [];
 	done: boolean = false;
-	teams: TeamCount;
+	teams: TeamCount = {};
 
 	add(actor: Actor) {
 		this.actors.push(actor);

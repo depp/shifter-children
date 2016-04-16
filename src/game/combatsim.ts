@@ -51,11 +51,7 @@ class Match {
 }
 
 function matchAll(): Match[] {
-	var shapes: string[] = [];
-	for (var shape in combat.Shapes) {
-		shapes.push(shape);
-	}
-	shapes.sort();
+	var shapes = combat.ShapeNames;
 	var matches: Match[] = [];
 	for (var i = 0; i < shapes.length; i++) {
 		for (var j = i; j < shapes.length; j++) {
