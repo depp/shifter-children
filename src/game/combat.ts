@@ -628,7 +628,6 @@ export class Actor {
 	status: Status;
 
 	constructor(team: number, control: Control, spec: ActorSpec) {
-		this.index = -1;
 		this.shape = spec.shape;
 		this.baseTeam = team;
 		this.baseControl = control;
@@ -741,6 +740,11 @@ export class Actor {
 	isValidTarget(): boolean {
 		return (this.status & Status.Dead) == 0;
 	}
+
+	// Actor is ready to act or select an action.
+	isReady(): boolean {
+		return (this.status & Status.Dead) == 0 && this.time <= 0;
+	}
 }
 
 // Adjust damage according to target compliance.
@@ -777,36 +781,26 @@ function randomDamage(damage: number): number {
  * ===========================================================================
  */
 
+export interface TeamCount {
+	[team: number]: number;
+}
+
 // Combat state manager.
 export class Combat {
 	actors: Actor[] = [];
 	done: boolean = false;
+	teams: TeamCount;
 
 	add(actor: Actor) {
-		actor.index = this.actors.length;
 		this.actors.push(actor);
 	}
 
 	// Update one step of combat.
 	update(): void {
-		var actor: Actor = null;
-		for (var a of this.actors) {
-			a.update();
-			if (!a.time && !actor) {
-				actor = a;
-			}
-		}
-		if (actor) {
-			var rec = actor.action;
-			if (rec) {
-				var action = rec.action;
-				actor.action = null;
-				if (action.act(this, rec)) {
-					actor.time = action.cooldown;
-				} else {
-					actor.time = 50;
-				}
-			} else {
+		// Choose actions for any actors ready to choose an action.
+		for (var actor of this.actors) {
+			if (actor.isReady() && !actor.action) {
+				var rec: ActionRecord = null;
 				switch (actor.control) {
 				case Control.Computer:
 					rec = this.computerAction(actor);
@@ -818,6 +812,44 @@ export class Combat {
 				}
 				actor.action = rec;
 				actor.time = rec.action.time;
+			}
+		}
+		// Perform at most one action, otherwise, update all actors.
+		var didAct = false;
+		for (var actor of this.actors) {
+			if (actor.isReady() && actor.action) {
+				// Take a previously selected action.
+				var rec = actor.action;
+				var action = rec.action;
+				actor.action = null;
+				if (action.act(this, rec)) {
+					actor.time = action.cooldown;
+				} else {
+					actor.time = 50;
+				}
+				didAct = true;
+				break;
+			}
+		}
+		if (!didAct) {
+			for (var actor of this.actors) {
+				actor.update();
+			}
+		}
+		// Check for the end of the battle.
+		for (var team in this.teams) {
+			this.teams[team] = 0;
+		}
+		for (var actor of this.actors) {
+			if ((actor.status & Status.Dead) === 0) {
+				this.teams[actor.baseTeam]++;
+			}
+		}
+		this.done = true;
+		for (var team in this.teams) {
+			if (this.teams[team] > 0) {
+				this.done = false;
+				break;
 			}
 		}
 	}
