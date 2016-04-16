@@ -7,10 +7,15 @@
   "main": "src/app.js",
   "dependencies": {},
   "devDependencies": {
+    "source-map-support": "^0.4.0",
     "typescript": "^1.9.0-dev.20160415"
   },
   "repository": {
     "type": "git",
     "url": "http://github.com/depp/kitten-teleporter.git"
+  },
+  "scripts": {
+    "combatsim": "node ./scripts/combatsim.js",
+		"combatsim-dev": "./node_modules/.bin/tsc -p src/tsconfig.json && node ./scripts/combatsim.js"
   }
 }

@@ -409,6 +409,9 @@ interface CMBuilder {
 function mkCompliance(info?: CMBuilder) {
 	var map: ComplianceMap = {};
 	function add(c: Compliance, alist: AttackType[]) {
+		if (!alist) {
+			return;
+		}
 		for (var a of alist) {
 			map[a] = c;
 		}

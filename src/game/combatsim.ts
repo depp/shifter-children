@@ -50,7 +50,7 @@ class Match {
 	}
 }
 
-function matchAll(): Match[] {
+export function matchAll(): Match[] {
 	var shapes = combat.ShapeNames;
 	var matches: Match[] = [];
 	for (var i = 0; i < shapes.length; i++) {

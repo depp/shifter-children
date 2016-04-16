@@ -1,0 +1,7 @@
+{
+  "eqeqeq": true,
+  "node": true,
+  "strict": "global",
+  "undef": true,
+  "unused": true
+}
