@@ -39,6 +39,14 @@ enum AttackType {
 	NoEvade,
 }
 
+export enum Status {
+	None = 0,
+	Dead        = 1 << 0,
+	LowHealth   = 1 << 1,
+	Darken      = 1 << 2,
+	Abjure      = 1 << 3,
+}
+
 /*
  * A character's "compliance" (can't think of a better word) to an
  * action.  Determines whether a character is strong or vulnerable.
@@ -59,6 +67,12 @@ enum Compliance {
 }
 
 type AttackCallback = (target: Actor, compliance: Compliance) => void;
+
+/*
+ * ===========================================================================
+ * Actions
+ * ===========================================================================
+ */
 
 /*
  * An "action" is any choice you can make during a character's turn in
@@ -346,6 +360,12 @@ function getAction(name: string): Action {
 }
 
 /*
+ * ===========================================================================
+ * Shapes
+ * ===========================================================================
+ */
+
+/*
  * A "shape" is one of the forms that a character can take, with
  * associated powers and attributes.
  */
@@ -466,22 +486,57 @@ function getShape(name: string): Shape {
 }
 
 /*
- * A status effect on an actor.
+ * ===========================================================================
+ * Persistent status effects
+ * ===========================================================================
  */
-interface StatusEffect {
-	// The name of the status type.
-	type: string;
+
+// An active persistent effect on an actor.
+abstract class PersistentEffect {
 	// Whether the effect is harmful.
-	isHarmful: bool;
+	isHarmful: boolean;
 	// Update the status effect.  Return true if the effect continues,
-	// false if the effect should be removed.
-	update(actor: Actor): boolean;
+	// false if the effect should be removed.  Called once per frame.
+	abstract update(actor: Actor): boolean;
+	// Apply the status effect to the actor.  This must only modify the
+	// actor's ephemeral properties, to make sure that
+	// Actor.applyEffects() is idempotent.
+	abstract apply(actor: Actor): void;
 }
 
+interface PersistentEffectType {
+	new(compliance: Compliance): PersistentEffect;
+}
+
+interface PersistentEffectMap {
+	[name: string]: PersistentEffectType;
+}
+
+const PersistentEffects: PersistentEffectMap = {
+	attackUp: null,
+	defenseDown: null,
+	drain: null,
+	frighten: null,
+	confuse: null,
+	stun: null,
+	burn: null,
+	smoke: null,
+	haste: null,
+	toss: null,
+	darken: null,
+	control: null,
+	abjure: null,
+};
+
 /*
- * An actor is a player character or enemy.
+ * ===========================================================================
+ * Actors
+ * ===========================================================================
+ *
+ * Actors are player characters or enemies.
  */
 
+// Spec for creating a new actor.
 export interface ActorSpec {
 	shape: string;
 	health: number;
@@ -525,7 +580,11 @@ export class Actor {
 	action: ActionRecord;
 
 	// Active status effects.
-	status: StatusEffect[];
+	persistentEffects: PersistentEffect[];
+	// The actor's current status.
+	curStatus: Status;
+	// The actor's status last frame.
+	prevStatus: Status;
 
 	constructor(team: number, control: Control, spec: ActorSpec) {
 		this.index = -1;
@@ -542,51 +601,104 @@ export class Actor {
 		this.baseSpeed = spec.speed;
 		this.curSpeed = spec.speed;
 		this.action = null;
-		this.status = [];
+		this.persistentEffects = [];
+		this.curStatus = Status.None;
+		this.prevStatus = Status.None;
+	}
+
+	// Update the actor state.
+	update(): void {
+		this.prevShape = this.curShape;
+		this.prevHealth = this.curHealth;
+		this.prevStatus = this.curStatus;
+		if (this.curStatus & Status.Dead) {
+			return;
+		}
+		for (var i = 0, fxs = this.persistentEffects; i < fxs.length;) {
+			if (fxs[i].update(this)) {
+				i++;
+			} else {
+				fxs.splice(i, 1);
+			}
+		}
+		this.applyEffects();
+	}
+
+	// Apply all active status effects to the actor and fix any
+	// properties that are out of range.  This is idempotent, it is
+	// called whenever something happens to the actor.
+	applyEffects(): void {
+		this.curHealth = Math.max(0, Math.min(this.baseHealth, this.curHealth));
+		this.curControl = this.baseControl
+		this.curTeam = this.baseTeam;
+		this.curSpeed = this.baseSpeed;
+		this.curStatus = Status.None;
+		if (this.curHealth === 0) {
+			this.curStatus = Status.Dead;
+			this.persistentEffects.length = 0;
+		} else if (this.curHealth < this.baseHealth / 5) {
+			this.curStatus = Status.LowHealth;
+		}
+		for (var fx of this.persistentEffects) {
+			fx.apply(this);
+		}
+	}
+
+	// Get the compliance to attacks of the given type.
+	compliance(type: AttackType): Compliance {
+		if (type == AttackType.NoEvade) {
+			return Compliance.Normal;
+		}
+		var c = getShape(this.curShape).compliance[type] || Compliance.Normal;
+		if (this.curStatus & Status.Darken) {
+			switch (c) {
+			case Compliance.Normal:
+			case Compliance.Resist:
+				c = Compliance.Vulnerable;
+				break;
+			case Compliance.Immune:
+				c = Compliance.Normal;
+				break;
+			case Compliance.Reflect:
+				break;
+			}
+		}
+		return c;
 	}
 }
 
 /*
- * Get the compliance of an actor to attacks of the given type.
+ * ===========================================================================
+ * Combat
+ * ===========================================================================
  */
-function getCompliance(actor: Actor, type: AttackType): Compliance {
-	if (type == AttackType.NoEvade) {
-		return Compliance.Normal;
+
+// Calculate attack damage.
+function attackDamage(compliance: Compliance, power: number): number {
+	switch (compliance) {
+	case Compliance.Normal:
+		break;
+	case Compliance.Resist:
+		power *= 0.5;
+		break;
+	case Compliance.Vulnerable:
+		power *= 2;
+		break;
+	case Compliance.Immune:
+		return 0;
 	}
-	var c = getShape(actor.curShape).compliance[type] || Compliance.Normal;
-	var darken = false;
-	for (var status of actor.status) {
-		switch (status.type) {
-		case 'darken': darken = true; break;
-		}
-	}
-	if (darken) {
-		switch (c) {
-		case Compliance.Normal:
-		case Compliance.Resist:
-			c = Compliance.Vulnerable;
-			break;
-		case Compliance.Immune:
-			c = Compliance.Normal;
-			break;
-		case Compliance.Reflect:
-			break;
-		}
-	}
-	return c;
+	var minDmg = (power * (2 / 3)) | 0;
+	var maxDmg = (power * (4 / 3)) | 0;
+	return Math.max(1, minDmg + (Math.random() * (maxDmg + 1 - minDmg)));
 }
 
-/*
- * Combat state manager.
- */
+// Combat state manager.
 export class Combat {
 	actors: Actor[] = [];
 	done: boolean = false;
 
 	add(actor: Actor) {
 		actor.index = this.actors.length;
-		actor.prevShape = actor.curShape;
-		actor.prevHealth = actor.curHealth;
 		this.actors.push(actor);
 	}
 
@@ -594,19 +706,18 @@ export class Combat {
 	update(): void {
 		var active: Actor = null;
 		for (var actor of this.actors) {
-			actor.prevShape = actor.curShape;
-			actor.prevHealth = actor.curHealth;
+			actor.update();
 			if (!actor.time && !active) {
 				active = actor;
 			}
 		}
 		if (active) {
-			var act = active.action;
-			if (act) {
-				var actionType = getAction(act.action);
+			var rec = active.action;
+			if (rec) {
+				var actionType = getAction(rec.action);
 				active.action = null;
 				active.time = actionType.cooldown;
-				actionType.act(this, act);
+				actionType.act(this, rec);
 			} else {
 				switch (active.curControl) {
 				case Control.Computer:
@@ -619,25 +730,10 @@ export class Combat {
 				}
 				active.time = getAction(active.action.action).time;
 			}
-		} else {
-			for (var actor of this.actors) {
-				actor.curControl = actor.baseControl
-				actor.curTeam = actor.baseTeam;
-				actor.curSpeed = actor.baseSpeed;
-				for (var i = 0, sts = actor.status; i < sts.length;) {
-					if (sts[i].update(actor)) {
-						i++;
-					} else {
-						sts.splice(i, 1);
-					}
-				}
-			}
 		}
 	}
 
-	/*
-	 * Have the computer choose an action for the given actor.
-	 */
+	// Have the computer choose an action for the given actor.
 	computerAction(actor: Actor): void {
 		var shape = Shapes[actor.curShape];
 		if (!shape) {
@@ -651,14 +747,14 @@ export class Combat {
 		if (!actionType) {
 			return;
 		}
-		var act = new ActionRecord(actName);
-		if (actionType.targeting == Targeting.Single) {
-			act.targetActor = randomUniform(
-				actionType.hostile ?
-					this.enemies(actor.curTeam) : this.allies(actor.curTeam));
-		}
-		act.targetTeam = actor.curTeam;
-		act.targetInvert = actionType.hostile;
+		var rec = new ActionRecord(actName);
+		rec.source = actor.index;
+		rec.isMultiplyTargeted = actionType.targeting !== Targeting.Single;
+		rec.isConfused = false;
+		rec.targetActor = null;
+		rec.targetTeam = actor.curTeam;
+		rec.targetInvert = actionType.hostile;
+		actor.action = rec;
 	}
 
 	/*
@@ -730,7 +826,7 @@ export class Combat {
 		var source = this.actors[rec.source];
 		var targets = this.getTargets(rec);
 		for (var target of targets) {
-			var compliance = getCompliance(target, spec.type);
+			var compliance = target.compliance(spec.type);
 			if (compliance === Compliance.Reflect) {
 				target = randomUniform(
 					this.actors.filter((a: Actor) => a.baseTeam !== target.baseTeam));
@@ -738,43 +834,43 @@ export class Combat {
 					console.warn('Invalid target');
 					continue;
 				}
-				compliance = getCompliance(target, spec.type);
+				compliance = target.compliance(spec.type);
 				if (compliance === Compliance.Reflect) {
 					compliance = Compliance.Normal;
 				}
 			}
-			var multiplier = 1;
-			switch (compliance) {
-			case Compliance.Normal:
-				break;
-			case Compliance.Resist:
-				multiplier = 0.5;
-				break;
-			case Compliance.Vulnerable:
-				multiplier = 2;
-				break;
-			case Compliance.Immune:
-				return;
+			if (compliance == Compliance.Immune) {
+				continue;
 			}
-			var dmg = 0;
+			var damage = 0;
 			if (typeof spec.power === 'number') {
-				var power = spec.power * multiplier;
-				var minDmg = (power * (2 / 3)) | 0;
-				var maxDmg = (power * (4 / 3)) | 0;
-				dmg = Math.max(1, minDmg + (Math.random() * (maxDmg + 1 - minDmg)));
-				target.curHealth -= dmg;
+				damage = attackDamage(compliance, spec.power);
+				target.curHealth -= damage;
 			}
-			switch (spec.effect) {
-			case 'drain':
-				if (source !== target) {
-					source.curHealth += dmg;
+			var effect = spec.effect;
+			if (effect && !PersistentEffects.hasOwnProperty(effect)) {
+				console.warn('Invalid effect: ' + effect);
+				effect = null;
+			}
+			if (effect) {
+				switch (effect) {
+				case 'drain':
+					if (source !== target) {
+						source.curHealth += damage;
+						source.applyEffects();
+					}
+					break;
 				}
-				break;
+				var effectType = PersistentEffects[effect];
+				if (effectType) {
+					var fx = new effectType(compliance);
+					if (fx.isHarmful && (target.curStatus & Status.Abjure)) {
+					} else {
+						target.persistentEffects.push(fx);
+					}
+				}
 			}
-			var statusType = StatusEffects[spec.effect];
-			if (statusType) {
-				var status = new statusType(spec);
-			}
+			target.applyEffects();
 		}
 	}
 }
