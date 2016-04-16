@@ -1,0 +1,67 @@
+# Text strings used in the game.
+
+shape:
+  were: Wereslash
+  bat: Vampbat
+  imp: Impfreet
+  glip: Glip
+  mage: Magiwizard
+  air: Airdevil
+  mirror: Mirreflect
+  unicorn: Einhorn
+
+action:
+  wereSlash:
+    name: Slash
+    help: Attack enemy
+  wereHowl:
+    name: Howl
+    help: Boost attack power
+  batBite:
+    name: Bite
+    help: Steal health
+  batScreech:
+    name: Screech
+    help: Scare foes
+  stonePound:
+    name: Pound
+    help: Attack enemy
+  stoneStomp:
+    name: Stomp
+    help: Attack enemies
+  impBlast:
+    name: Fireblast
+    help: Attack enemy
+  impSmoke:
+    name: Smoke
+    help: Hide from enemies
+  glipMutate:
+    name: Mutate
+    help: Try something else
+  glipLaugh:
+    name: Laugh
+    help: Confuse enemy
+  mageBolt:
+    name: Arcane Bolt
+    help: Attack enemy
+  mageHaste:
+    name: Haste
+    help: Move faster
+  airGale:
+    name: Gale Cut
+    help: Attack foes
+  airToss:
+    name: Air Toss
+    help: Send to the skies
+  mirrorClone:
+    name: Multiply
+    help: Create clones
+  mirrorCapture:
+    name: Capture
+    help: Use enemy powers
+  unicornPurify:
+    name: Purify
+    help: Heal ally
+  unicornAbjure:
+    name: Abjure
+    help: Protect ally

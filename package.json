@@ -1,0 +1,16 @@
+{
+  "name": "ShifterChildren",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A game for Ludum Dare #35",
+  "author": "Dietrich Epp <depp@zdome.net>",
+  "main": "src/app.js",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^1.9.0-dev.20160415"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/depp/kitten-teleporter.git"
+  }
+}

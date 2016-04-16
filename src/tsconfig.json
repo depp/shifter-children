@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "outDir": "../build/tsc",
+    "preserveConstEnums": false,
+    "removeComments": true,
+    "rootDir": ".",
+    "sourceMap": true,
+    "target": "ES5"
+  }
+}
