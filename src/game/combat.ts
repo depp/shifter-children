@@ -28,10 +28,16 @@ enum Hit {
 	Reflect
 }
 
-type AttackType =
-	'fight' | 'psychic' | 'fire' | 'magic' | 'air' | 'ground' | 'blessing';
-type AttackEffect
-	= 'normal' | 'drain';
+enum AttackType {
+	Fight,
+	Psychic,
+	Fire,
+	Magic,
+	Air,
+	Ground,
+	Blessing,
+	NoEvade,
+}
 
 /*
  * A character's "compliance" (can't think of a better word) to an
@@ -64,6 +70,10 @@ class ActionRecord {
 	action: string;
 	// The actor performing the action.
 	source: number;
+	// Whether this action is multiply targeted.
+	isMultiplyTargeted: boolean;
+	// Whether the source actor is confused.
+	isConfused: boolean;
 	// The targeted actor, if this is a singly-targeted action.  The
 	// team will also be set.
 	targetActor: number;
@@ -72,9 +82,6 @@ class ActionRecord {
 	targetTeam: number;
 	// Whether the target set is complemented.
 	targetInvert: boolean;
-	// How to handle retargeting if the target is not a valid target
-	// when the action runs.  This cannot be Player.
-	retargetControl: Control;
 
 	constructor(action: string) {
 		this.action = action;
@@ -98,6 +105,12 @@ export interface ActionMap {
 	[name: string]: Action;
 }
 
+interface AttackSpec {
+	type: AttackType;
+	effect?: string;
+	power?: number;
+}
+
 export const Actions: ActionMap = {
 	wereSlash: {
 		targeting: Targeting.Single,
@@ -105,11 +118,10 @@ export const Actions: ActionMap = {
 		time: 120,
 		cooldown: 500,
 		act: function(combat: Combat, rec: ActionRecord) {
-			combat.attack(
-				rec.source, [rec.targetActor], 'fight',
-				(a: Actor, c: Compliance) => {
-
-				});
+			combat.attack(rec, {
+				type: AttackType.Fight,
+				power: 25,
+			});
 		}
 	},
 	wereHowl: {
@@ -117,52 +129,91 @@ export const Actions: ActionMap = {
 		hostile: false,
 		time: 300,
 		cooldown: 800,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Psychic,
+				effect: 'attackUp',
+			});
+		}
 	},
 	batBite: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 150,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Fight,
+				power: 25,
+				effect: 'drain',
+			});
+		}
 	},
 	batScreech: {
 		targeting: Targeting.Multiple,
 		hostile: true,
 		time: 300,
 		cooldown: 800,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Psychic,
+				effect: 'frighten',
+			});
+		}
 	},
 	stonePound: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 250,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Ground,
+				power: 30,
+				effect: 'stun',
+			});
+		}
 	},
 	stoneStomp: {
 		targeting: Targeting.Multiple,
 		hostile: true,
 		time: 500,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Ground,
+				power: 20,
+			});
+		}
 	},
 	impBlast: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 200,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Fire,
+				power: 20,
+				effect: 'burn',
+			});
+		}
 	},
 	impSmoke: {
 		targeting: Targeting.Multiple,
 		hostile: false,
 		time: 300,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.NoEvade,
+				effect: 'smoke',
+			});
+		}
 	},
 	glipMutate: {
-		targeting: Targeting.Multiple,
+		// Special
+		targeting: Targeting.None,
 		hostile: false,
 		time: 25,
 		cooldown: 1200,
@@ -173,63 +224,107 @@ export const Actions: ActionMap = {
 		hostile: true,
 		time: 350,
 		cooldown: 900,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Psychic,
+				effect: 'confuse',
+			});
+		}
 	},
 	mageBolt: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 225,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Magic,
+				power: 25,
+			})
+		}
 	},
 	mageHaste: {
 		targeting: Targeting.Single,
 		hostile: false,
 		time: 450,
 		cooldown: 450,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Magic,
+				effect: 'haste',
+			})
+		}
 	},
 	airGale: {
 		targeting: Targeting.Multiple,
 		hostile: true,
 		time: 275,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Air,
+			});
+		}
 	},
 	airToss: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 350,
 		cooldown: 600,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Air,
+				effect: 'toss',
+			});
+		}
 	},
-	mirrorClone: {
+	mirrorDarken: {
 		targeting: Targeting.Single,
-		hostile: false,
+		hostile: true,
 		time: 400,
 		cooldown: 700,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Magic,
+				effect: 'darken',
+			});
+		}
 	},
 	mirrorCapture: {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 400,
 		cooldown: 700,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Magic,
+				effect: 'control',
+			});
+		}
 	},
 	unicornPurify: {
 		targeting: Targeting.Single,
 		hostile: false,
 		time: 250,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Blessing,
+				power: 75,
+			});
+		}
 	},
 	unicornAbjure: {
 		targeting: Targeting.Multiple,
 		hostile: false,
 		time: 250,
 		cooldown: 500,
-		act: function(combat: Combat, rec: ActionRecord) {}
+		act: function(combat: Combat, rec: ActionRecord) {
+			combat.attack(rec, {
+				type: AttackType.Blessing,
+				effect: 'abjure',
+			});
+		}
 	},
 };
 
@@ -256,7 +351,7 @@ function getAction(name: string): Action {
  */
 
 export interface ComplianceMap {
-	[type: string]: Compliance;
+	[type: number]: Compliance;
 }
 
 export interface Shape {
@@ -279,14 +374,13 @@ interface CMBuilder {
 }
 
 function mkCompliance(info?: CMBuilder) {
-	var map: ComplianceMap = {
-		blessing: Compliance.Absorb,
-	};
+	var map: ComplianceMap = {};
 	function add(c: Compliance, alist: AttackType[]) {
 		for (var a of alist) {
 			map[a] = c;
 		}
 	}
+	add(Compliance.Absorb, [AttackType.Blessing]);
 	if (info) {
 		add(Compliance.Immune, info.immune);
 		add(Compliance.Resist, info.resist);
@@ -301,50 +395,50 @@ export const Shapes: ShapeMap = {
 	were: {
 		actions: ['wereSlash', 'wereHowl'],
 		compliance: mkCompliance({
-			resist: ['psychic'],
-			vulnerable: ['fire'],
+			resist: [AttackType.Psychic],
+			vulnerable: [AttackType.Fire],
 		}),
 	},
 	bat: {
 		actions: ['batBite', 'batScreech'],
 		compliance: mkCompliance({
-			resist: ['ground'],
-			vulnerable: ['air'],
+			resist: [AttackType.Ground],
+			vulnerable: [AttackType.Air],
 		}),
 	},
 	stone: {
 		actions: ['stonePound', 'stoneStomp'],
 		compliance: mkCompliance({
-			resist: ['air'],
-			vulnerable: ['fire', 'magic'],
+			resist: [AttackType.Air],
+			vulnerable: [AttackType.Fire, AttackType.Magic],
 		}),
 	},
 	imp: {
 		actions: ['impBlast', 'impSmoke'],
 		compliance: mkCompliance({
-			resist: ['fight'],
-			vulnerable: ['psychic'],
+			resist: [AttackType.Fight],
+			vulnerable: [AttackType.Psychic],
 		}),
 	},
 	air: {
 		actions: ['airGale', 'airToss'],
 		compliance: mkCompliance({
-			resist: ['ground', 'fight'],
-			vulnerable: ['air', 'magic'],
+			resist: [AttackType.Ground, AttackType.Fight],
+			vulnerable: [AttackType.Air, AttackType.Magic],
 		}),
 	},
 	mage: {
 		actions: ['mageBolt', 'mageHaste'],
 		compliance: mkCompliance({
-			resist: ['psychic'],
-			vulnerable: ['fight'],
+			resist: [AttackType.Psychic],
+			vulnerable: [AttackType.Fight],
 		}),
 	},
 	mirror: {
 		actions: ['mirrorClone', 'mirrorCapture'],
 		compliance: mkCompliance({
-			resist: ['fire', 'magic', 'psychic'],
-			vulnerable: ['fight', 'ground'],
+			resist: [AttackType.Fire, AttackType.Magic, AttackType.Psychic],
+			vulnerable: [AttackType.Fight, AttackType.Ground],
 		}),
 	},
 	unicorn: {
@@ -374,7 +468,11 @@ function getShape(name: string): Shape {
 /*
  * A status effect on an actor.
  */
-interface Status {
+interface StatusEffect {
+	// The name of the status type.
+	type: string;
+	// Whether the effect is harmful.
+	isHarmful: bool;
 	// Update the status effect.  Return true if the effect continues,
 	// false if the effect should be removed.
 	update(actor: Actor): boolean;
@@ -427,7 +525,7 @@ export class Actor {
 	action: ActionRecord;
 
 	// Active status effects.
-	status: Status[];
+	status: StatusEffect[];
 
 	constructor(team: number, control: Control, spec: ActorSpec) {
 		this.index = -1;
@@ -448,10 +546,39 @@ export class Actor {
 	}
 }
 
+/*
+ * Get the compliance of an actor to attacks of the given type.
+ */
 function getCompliance(actor: Actor, type: AttackType): Compliance {
-	return getShape(actor.curShape).compliance[type] || Compliance.Normal;
+	if (type == AttackType.NoEvade) {
+		return Compliance.Normal;
+	}
+	var c = getShape(actor.curShape).compliance[type] || Compliance.Normal;
+	var darken = false;
+	for (var status of actor.status) {
+		switch (status.type) {
+		case 'darken': darken = true; break;
+		}
+	}
+	if (darken) {
+		switch (c) {
+		case Compliance.Normal:
+		case Compliance.Resist:
+			c = Compliance.Vulnerable;
+			break;
+		case Compliance.Immune:
+			c = Compliance.Normal;
+			break;
+		case Compliance.Reflect:
+			break;
+		}
+	}
+	return c;
 }
 
+/*
+ * Combat state manager.
+ */
 export class Combat {
 	actors: Actor[] = [];
 	done: boolean = false;
@@ -498,9 +625,10 @@ export class Combat {
 				actor.curTeam = actor.baseTeam;
 				actor.curSpeed = actor.baseSpeed;
 				for (var i = 0, sts = actor.status; i < sts.length;) {
-					var st = sts[i];
-					if (!st.update(actor)) {
-
+					if (sts[i].update(actor)) {
+						i++;
+					} else {
+						sts.splice(i, 1);
 					}
 				}
 			}
@@ -568,72 +696,86 @@ export class Combat {
 	}
 
 	/*
-	 * Perform an attack by an actor against other actors.  The results
-	 * of the attack are passed through the action callback function.
+	 * Get the actors on a given team (if invert is false) or the actors
+	 * on all other teams (if invert is true).
 	 */
-	attack(source: number, targets: number[], type: AttackType,
-				 action: AttackCallback): void
-	{
-		var srcActor = this.actors[source];
-		for (var target of targets) {
-			var targetActor = this.actors[target];
-			if (!targetActor) {
-				console.warn('Invalid target');
-				continue;
-			}
-			var compliance = getCompliance(targetActor, type);
-			if (compliance === Compliance.Reflect) {
-				targetActor = this.actors[
-					randomUniform(this.enemies(targetActor.baseTeam))];
-				if (!targetActor) {
-					console.warn('Invalid target');
-					continue;
-				}
-				compliance = getCompliance(targetActor, type);
-				if (compliance === Compliance.Reflect) {
-					compliance = Compliance.Normal;
-				}
-			}
-			action(targetActor, compliance);
+	private getTeam(team: number, invert: boolean): Actor[] {
+		if (invert) {
+			return this.actors.filter((a: Actor) => a.baseTeam === team);
+		} else {
+			return this.actors.filter((a: Actor) => a.baseTeam !== team);
 		}
 	}
 
 	/*
-	 * Apply damage to targets.
+	 * Get actual targets for an attack.
 	 */
-	attackDamage(source: Actor, power: number,
-							 effect: AttackEffect): AttackCallback
-	{
-		return (target: Actor, compliance: Compliance) => {
-			var pow = power;
+	getTargets(rec: ActionRecord): Actor[] {
+		if (rec.isMultiplyTargeted) {
+			return this.getTeam(rec.targetTeam, rec.targetInvert);
+		}
+		var targetActor = rec.targetActor;
+		if (typeof targetActor === 'number') {
+			return [this.actors[targetActor]];
+		}
+		return [randomUniform(
+			rec.isConfused ?
+				this.actors : this.getTeam(rec.targetTeam, rec.targetInvert))];
+	}
+
+	/*
+	 * Perform an attack by an actor against other actors.
+	 */
+	attack(rec: ActionRecord, spec: AttackSpec): void {
+		var source = this.actors[rec.source];
+		var targets = this.getTargets(rec);
+		for (var target of targets) {
+			var compliance = getCompliance(target, spec.type);
+			if (compliance === Compliance.Reflect) {
+				target = randomUniform(
+					this.actors.filter((a: Actor) => a.baseTeam !== target.baseTeam));
+				if (!target) {
+					console.warn('Invalid target');
+					continue;
+				}
+				compliance = getCompliance(target, spec.type);
+				if (compliance === Compliance.Reflect) {
+					compliance = Compliance.Normal;
+				}
+			}
+			var multiplier = 1;
 			switch (compliance) {
 			case Compliance.Normal:
 				break;
 			case Compliance.Resist:
-				pow *= 0.5;
+				multiplier = 0.5;
 				break;
 			case Compliance.Vulnerable:
-				pow *= 2;
+				multiplier = 2;
 				break;
 			case Compliance.Immune:
 				return;
 			}
-			var dmg: number;
-			if (power > 0) {
-				var minDmg = (pow * (2 / 3)) | 0, maxDmg = (pow * (4 / 3)) | 0;
+			var dmg = 0;
+			if (typeof spec.power === 'number') {
+				var power = spec.power * multiplier;
+				var minDmg = (power * (2 / 3)) | 0;
+				var maxDmg = (power * (4 / 3)) | 0;
 				dmg = Math.max(1, minDmg + (Math.random() * (maxDmg + 1 - minDmg)));
 				target.curHealth -= dmg;
-			} else {
-				dmg = 0;
 			}
-			switch (effect) {
+			switch (spec.effect) {
 			case 'drain':
 				if (source !== target) {
 					source.curHealth += dmg;
 				}
 				break;
 			}
-		};
+			var statusType = StatusEffects[spec.effect];
+			if (statusType) {
+				var status = new statusType(spec);
+			}
+		}
 	}
 }
 
