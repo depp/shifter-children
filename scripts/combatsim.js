@@ -8,11 +8,10 @@ var param = {
 	health: 100,
 	speed: 10,
 	teamSize: 2,
+	count: 100,
 };
 for (var i = 0; i < matches.length; i++) {
 	var match = matches[i];
 	match.run(param);
+	console.log(match);
 }
-
-console.log(process.argv);
-console.log(matches);

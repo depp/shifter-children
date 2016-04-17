@@ -6,12 +6,13 @@
 
 import * as combat from './combat';
 
-const MaxUpdates = 10000;
+const MaxTurns = 2000;
 
 interface SimParam {
 	health: number;
 	speed: number;
 	teamSize: number;
+	count: number;
 }
 
 class Match {
@@ -29,24 +30,32 @@ class Match {
 	}
 
 	run(param: SimParam) {
-		var { health, speed, teamSize } = param;
-		var c = new combat.Combat();
+		var { health, speed, teamSize, count } = param;
 		var s1: combat.ActorSpec = { shape: this.shape1, health, speed };
 		var s2: combat.ActorSpec = { shape: this.shape2, health, speed };
-		for (var i = 0; i < teamSize; i++) {
-			c.add(new combat.Actor(1, combat.Control.Computer, s1));
-		}
-		for (var i = 0; i < teamSize; i++) {
-			c.add(new combat.Actor(2, combat.Control.Computer, s1));
-		}
-		for (var i = 0; i < MaxUpdates; i++) {
-			c.update();
-			this.turns++;
-			if (c.done) {
-				return;
+		for (var iter = 0; iter < count; iter++) {
+			var c = new combat.Combat();
+			for (var i = 0; i < teamSize; i++) {
+				c.add(new combat.Actor(1, combat.Control.Computer, s1));
 			}
+			for (var i = 0; i < teamSize; i++) {
+				c.add(new combat.Actor(2, combat.Control.Computer, s1));
+			}
+			var turn = 0;
+			while (!c.done && turn < MaxTurns) {
+				turn++;
+				c.update();
+			}
+			this.turns += turn;
+			if (c.teams[1] && !c.teams[2]) {
+				this.wins1++;
+			} else if (!c.teams[1] && c.teams[2]) {
+				this.wins2++;
+			} else {
+				this.ties++;
+			}
+			this.count++;
 		}
-		this.count++;
 	}
 }
 

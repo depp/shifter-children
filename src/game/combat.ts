@@ -93,6 +93,8 @@ class ActionRecord {
 	source: Actor;
 	// The selected action.
 	action: Action;
+	// The name of the selected action.
+	actionName: string;
 	// Whether the source actor is confused.
 	isConfused: boolean;
 	// The targeted actor, if this is a singly-targeted action.  The
@@ -104,9 +106,10 @@ class ActionRecord {
 	// Whether the target set is complemented.
 	targetInvert: boolean;
 
-	constructor(source: Actor, action: Action) {
+	constructor(source: Actor, action: string) {
 		this.source = source;
-		this.action = action;
+		this.action = getAction(action);
+		this.actionName = action;
 	}
 }
 
@@ -368,7 +371,9 @@ function getAction(name: string): Action {
 	if (a) {
 		return a;
 	}
-	console.warn('Invalid action: ' + name);
+	if (name !== null) {
+		console.warn('Invalid action: ' + name);
+	}
 	return MissingAction;
 }
 
@@ -471,7 +476,7 @@ const Shapes: ShapeMap = {
 		}),
 	},
 	mirror: {
-		actions: ['mirrorClone', 'mirrorCapture'],
+		actions: ['mirrorDarken', 'mirrorCapture'],
 		compliance: mkCompliance({
 			resist: [AttackType.Fire, AttackType.Magic, AttackType.Psychic],
 			vulnerable: [AttackType.Fight, AttackType.Ground],
@@ -548,9 +553,8 @@ class DamageEffect implements PersistentEffect {
 		if (this.tick == DamageInterval) {
 			this.tick = 0;
 			actor.damage(
-				adjustDamage(
-					randomDamage(this.damage),
-					actor.compliance(this.type)))
+				randomDamage(
+					adjustDamage(this.damage, actor.compliance(this.type))));
 		}
 	}
 	apply(actor: Actor): void {
@@ -634,6 +638,7 @@ export class Actor {
 	status: Status;
 
 	constructor(team: number, control: Control, spec: ActorSpec) {
+		this.index = -1;
 		this.shape = spec.shape;
 		this.baseTeam = team;
 		this.baseControl = control;
@@ -641,7 +646,7 @@ export class Actor {
 		this.control = control;
 		this.baseHealth = spec.health;
 		this.health = spec.health;
-		this.time = 200;
+		this.time = 100 + 100 * Math.random();
 		this.baseSpeed = spec.speed;
 		this.speed = spec.speed;
 		this.action = null;
@@ -663,6 +668,11 @@ export class Actor {
 			}
 		}
 		this.applyEffects();
+		if ((this.status & Status.Dead) === 0) {
+			this.time -= this.speed;
+		} else {
+			// console.log('  IS DEAD: ' + this.index);
+		}
 	}
 
 	// Apply all active status effects to the actor and fix any
@@ -718,6 +728,7 @@ export class Actor {
 		var oldHealth = this.health;
 		var newHealth = Math.max(0, Math.min(this.baseHealth, oldHealth - damage));
 		this.health = newHealth;
+		// console.log('    damage: ' + damage);
 		return newHealth - oldHealth;
 	}
 
@@ -755,15 +766,22 @@ export class Actor {
 
 // Adjust damage according to target compliance.
 function adjustDamage(damage: number, compliance: Compliance) {
-	var sign = damage >= 0 ? +1 : -1;
+	var sign: number, magnitude: number;
+	if (damage < 0) {
+		sign = -1;
+		magnitude = -damage;
+	} else {
+		sign = +1;
+		magnitude = damage;
+	}
 	switch (compliance) {
 	case Compliance.Normal:
 		break;
 	case Compliance.Resist:
-		damage *= 0.5;
+		magnitude *= 0.5;
 		break;
 	case Compliance.Vulnerable:
-		damage *= 2;
+		magnitude *= 2;
 		break;
 	case Compliance.Immune:
 		return 0;
@@ -771,14 +789,17 @@ function adjustDamage(damage: number, compliance: Compliance) {
 		sign = -sign;
 		return 0;
 	}
-	return sign * Math.max(1, damage | 0);
+	// console.log('    adjust: ' + sign + ' * ' + magnitude);
+	return sign * Math.max(1, magnitude | 0);
 }
 
 // Adjust damage randomly.
 function randomDamage(damage: number): number {
-	var minDamage = (damage * (2 / 3)) | 0;
-	var maxDamage = (damage * (4 / 3)) | 0;
-	return minDamage + (Math.random() * (maxDamage + 1 - minDamage));
+	var x0 = damage * (2 / 3);
+	var x1 = damage * (4 / 3);
+	var base = Math.floor(Math.min(x0, x1) + 0.5);
+	var random = Math.floor(Math.max(x0, x1) + 0.5) - base;
+	return base + Math.max(random, Math.floor(Math.random() * (random + 1)));
 }
 
 /*
@@ -798,13 +819,18 @@ export class Combat {
 	teams: TeamCount = {};
 
 	add(actor: Actor) {
+		actor.index = this.actors.length;
 		this.actors.push(actor);
+		var n = this.teams[actor.baseTeam];
+		this.teams[actor.baseTeam] = (n || 0) + 1;
 	}
 
 	// Update one step of combat.
 	update(): void {
+		// console.log('---');
 		// Choose actions for any actors ready to choose an action.
 		for (var actor of this.actors) {
+			// console.log('Actor ' + actor.index + ' health=' + actor.health);
 			if (actor.isReady() && !actor.action) {
 				var rec: ActionRecord = null;
 				switch (actor.control) {
@@ -814,7 +840,7 @@ export class Combat {
 				}
 				if (!rec) {
 					console.warn('No action selected');
-					rec = new ActionRecord(actor, MissingAction);
+					rec = new ActionRecord(actor, null);
 				}
 				actor.action = rec;
 				actor.time = rec.action.time;
@@ -826,6 +852,7 @@ export class Combat {
 			if (actor.isReady() && actor.action) {
 				// Take a previously selected action.
 				var rec = actor.action;
+				// console.log('Action: ' + rec.actionName);
 				var action = rec.action;
 				actor.action = null;
 				if (action.act(this, rec)) {
@@ -851,12 +878,14 @@ export class Combat {
 				this.teams[actor.baseTeam]++;
 			}
 		}
-		this.done = true;
+		var teamCount = 0;
 		for (var team in this.teams) {
 			if (this.teams[team] > 0) {
-				this.done = false;
-				break;
+				teamCount++;
 			}
+		}
+		if (teamCount <= 1) {
+			this.done = true;
 		}
 	}
 
@@ -864,21 +893,25 @@ export class Combat {
 	computerAction(actor: Actor): ActionRecord {
 		var shape = Shapes[actor.shape];
 		if (!shape) {
+			console.warn('Invalid shape: ' + actor.shape);
 			return null;
 		}
 		var actName = randomTri(shape.actions);
 		if (!actName) {
+			console.warn('No actions');
 			return null;
 		}
 		var actionType = Actions[actName];
 		if (!actionType) {
+			console.warn('Invalid action: ' + actName);
 			return null;
 		}
-		var rec = new ActionRecord(actor, getAction(actName));
+		// console.log('Action: ' + actName);
+		var rec = new ActionRecord(actor, actName);
 		rec.isConfused = false;
 		rec.targetActor = null;
 		rec.targetTeam = actor.team;
-		rec.targetInvert = actionType.hostile;
+		rec.targetInvert = rec.action.hostile;
 		return rec;
 	}
 
@@ -893,10 +926,10 @@ export class Combat {
 		}
 		if (invert) {
 			return this.actors.filter(
-				(a: Actor) => a.baseTeam === team && a.isValidTarget());
+				(a: Actor) => a.baseTeam !== team && a.isValidTarget());
 		} else {
 			return this.actors.filter(
-				(a: Actor) => a.baseTeam !== team && a.isValidTarget());
+				(a: Actor) => a.baseTeam === team && a.isValidTarget());
 		}
 	}
 
@@ -925,11 +958,14 @@ export class Combat {
 	attack(rec: ActionRecord, spec: AttackSpec): boolean {
 		var source = rec.source;
 		var targets = this.getAttackTargets(rec);
+		// console.log('Attack');
 		if (!targets.length) {
+			// console.log('fizzle');
 			return false;
 		}
 		for (var target of targets) {
 			var compliance = target.compliance(spec.type);
+			// console.log(Compliance[compliance]);
 			if (compliance === Compliance.Reflect) {
 				target = randomUniform(
 					this.actors.filter((a: Actor) => a.baseTeam !== target.baseTeam));
@@ -948,7 +984,7 @@ export class Combat {
 			var damage = 0;
 			if (typeof spec.damage === 'number') {
 				damage = target.damage(
-					adjustDamage(compliance, randomDamage(spec.damage)));
+					randomDamage(adjustDamage(spec.damage, compliance)));
 			}
 			var effect = spec.effect;
 			if (effect && !PersistentEffects.hasOwnProperty(effect)) {
@@ -1004,7 +1040,7 @@ function randomTri<T>(choices: T[]): T {
 	var c = 0;
 	for (; i < choices.length - 1; i++) {
 		c += (n - i);
-		if (c > t) {
+		if (c > r) {
 			break;
 		}
 	}
