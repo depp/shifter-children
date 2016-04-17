@@ -18,6 +18,9 @@ import * as color from './color';
 import * as load from './load';
 import * as shader from './shader';
 
+export const HeadFont = 0;
+export const BodyFont = 1;
+
 // Attribute offsets
 const APos = 0;       // int16 x 2
 const ATexCoord = 4;  // int16 x 2
@@ -201,25 +204,6 @@ export var ui = new TextLayer;
 
 /********************************************************************/
 
-export interface FontSpec {
-	family: string;
-}
-
-export function findFont(spec: FontSpec) {
-	var { family } = spec;
-	var fs = AssetInfo.Fonts;
-	for (var i = 0; i < fs.length; i++) {
-		var f = fs[i];
-		if (f.name == family) {
-			return f;
-		}
-	}
-	console.warn('Cannot find font:', spec);
-	return fs[0];
-}
-
-/********************************************************************/
-
 const AttrSpace = 1, AttrLB = 2, AttrPB = 3;
 const AttrMap: { [c: string]: number } = {
 	' ': AttrSpace,
@@ -229,7 +213,7 @@ const AttrMap: { [c: string]: number } = {
 };
 
 export interface TextRun {
-	font: Assets.FontInfo;
+	font: number;
 	text: string;
 	scale?: number;
 	style?: number;
@@ -365,14 +349,15 @@ export class Builder {
 	 * Add text to the end of the text flow.
 	 */
 	add({ font, text, scale = 1, style = 0 }: TextRun): void {
-		this._ascender = Math.max(this._ascender, font.ascender * scale);
-		this._descender = Math.min(this._descender, font.descender * scale);
-		this._lineheight = Math.max(this._lineheight, font.height * scale);
+		var finfo = AssetInfo.fonts[font];
+		this._ascender = Math.max(this._ascender, finfo.ascender * scale);
+		this._descender = Math.min(this._descender, finfo.descender * scale);
+		this._lineheight = Math.max(this._lineheight, finfo.height * scale);
 		var n = text.length, i0 = this._size, i1 = this._size + n;
 		var gidx = new Int16Array(n);
 		this._reserve(n);
 		{
-			var glyph = font.glyph, char = font.char;
+			var glyph = finfo.glyph, char = finfo.char;
 			for (var i = 0, j = this._size; i < text.length; i++, j++) {
 				var c = text[i];
 				var g = char.indexOf(text[i]);
@@ -406,8 +391,8 @@ export class Builder {
 				this._gatt[j] = AttrMap[c] || 0;
 			}
 		}
-		if (font.kern && false) {
-			var n = font.glyphcount, kern = font.kern;
+		if (finfo.kern && false) {
+			var n = finfo.glyphcount, kern = finfo.kern;
 			for (var i = i0; i < i1; i++) {
 				this._gadv[i] += kern[gidx[i] * n + gidx[i + 1]];
 			}

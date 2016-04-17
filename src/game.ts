@@ -38,15 +38,15 @@ export class GameScreen implements state.Screen, time.TimeTarget {
 		var obj = new text.TextObject();
 		var b = new text.Builder();
 		b.add({
-			font: text.findFont({ family: 'Alegreya' }),
+			font: text.HeadFont,
 			text: 'Blast Off!',
 		});
 		b.finish();
-		obj.addLayout(b, { x: 20, y: 420 });
+		obj.addLayout(b, { x: 20, y: 320 });
 		b.clear();
 
 		b.add({
-			font: text.findFont({ family: 'Ropa Sans' }),
+			font: text.BodyFont,
 			text: MobyDick,
 		});
 		b.finish({
@@ -54,7 +54,7 @@ export class GameScreen implements state.Screen, time.TimeTarget {
 			indent: 40,
 			align: text.TextAlign.Justify,
 		});
-		obj.addLayout(b, { x: 100, y: 400 });
+		obj.addLayout(b, { x: 100, y: 300 });
 
 		// vec2.set(obj.position, param.Width / 2, param.Height / 2);
 		text.ui.add(obj);

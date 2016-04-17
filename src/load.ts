@@ -30,7 +30,7 @@ var Levels: LevelSet;
  */
 function loadImages(func: () => void) {
 	Images = {};
-	var info = AssetInfo.Images;
+	var info = AssetInfo.images;
 	var count = _.size(info), loaded = 0;
 	_.forOwn(info, (path: string, name: string) => {
 		var img = new Image();
@@ -77,7 +77,7 @@ function loadAll(func: () => void) {
 			func();
 		}
 	}
-	_.forEach(AssetInfo.Fonts, (font: Assets.FontInfo) => {
+	_.forEach(AssetInfo.fonts, (font: Assets.FontInfo) => {
 		font.glyph = new Int16Array(
 			_.map(
 				(<any> font.glyph).split(','),

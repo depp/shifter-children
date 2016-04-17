@@ -29,9 +29,14 @@ declare module Assets {
 		[name: string]: string;
 	}
 
+	interface SpriteMap {
+		[name: string]: number[];
+	}
+
 	interface AssetInfo {
-		Fonts: FontInfo[];
-		Images: ImageSetInfo;
+		fonts: FontInfo[];
+		images: ImageSetInfo;
+		sprites: SpriteMap;
 	}
 }
 

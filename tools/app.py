@@ -37,9 +37,11 @@ class App(object):
         del shaders, shaderinfo
 
         assets = {}
-        with open('assets/images/fonts.json', 'r') as fp:
-            assets['Fonts'] = json.load(fp)
-        self.build_images(assets, 'images', 'Images')
+        with open('assets/images/fonts.json') as fp:
+            assets['fonts'] = json.load(fp)
+        with open('assets/images/sprites.json') as fp:
+            assets['sprites'] = json.load(fp)
+        self.build_images(assets, 'images', 'images')
 
         # Top-level scripts.
         scripts = [
@@ -104,26 +106,6 @@ class App(object):
             out_rel = os.path.relpath(out_path, out_root)
             images[name] = out_rel
         assets[keyname] = images
-
-    def build_levels(self, assets):
-        """Build all levels."""
-        levels = {}
-        in_root = os.path.join('assets', 'levels')
-        out_root = os.path.join('build', 'levels')
-        for path in build.all_files(in_root, exts={'.tmx'}):
-            if os.path.basename(path).startswith('_'):
-                continue
-            relpath = os.path.relpath(path, in_root)
-            name = os.path.splitext(relpath)[0]
-            out_path = self.system.build(
-                os.path.join(out_root, os.path.splitext(relpath)[0] + '.json'),
-                self.build_level,
-                args=(path,),
-                deps=[path],
-                bust=True)
-            out_rel = os.path.relpath(out_path, out_root)
-            levels[name] = out_rel
-        assets['Levels'] = levels
 
     def shaders(self, info_path, paths):
         """Get the contents of the shader module."""
