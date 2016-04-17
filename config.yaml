@@ -1,0 +1,19 @@
+---
+config:
+  base:
+    name: Shifter_Children
+    app_name: Shifter Children
+    copyright: Copyright 2016 Dietrich Epp
+    github: http://github.com/depp/shifter-children
+    instructions: |
+      <p>Totally in progress, not a viable game yet.</p>
+      <h3>Controls</h3>
+      <ul class="controls">
+        <li><span>A:</span> do the A thing</li>
+        <li><span>B:</span> do the B thing</li>
+      </ul>
+      <h3>Links</h3>
+      <ul class="links">
+        <li><a href="http://www.example.com/">Example</a></li>
+        <li><a href="http://www.example.com/">Example 2</a></li>
+      </ul>

@@ -1,0 +1,13 @@
+---
+Sprites:
+  vert: plain.vert
+  frag: plain.frag
+  attributes: Pos Color
+LoadScreen:
+  vert: fullscreen.vert
+  frag: loading_bg.frag
+  attributes: Pos
+Text:
+  vert: text.vert
+  frag: text.frag
+  attributes: Pos TexCoord Style

@@ -1,0 +1,17 @@
+---
+Sprite:
+  vert: plain
+  frag: plain
+  attributes: Pos Color
+LoadScreen:
+  vert: fullscreen
+  frag: loading_bg
+  attributes: Pos
+Text:
+  vert: text
+  frag: text
+  attributes: Pos TexCoord Color
+Tile:
+  vert: tile
+  frag: tile
+  attributes: Pos TexCoord

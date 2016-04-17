@@ -555,7 +555,8 @@ const Shapes: ShapeMap = {
 		defense: 1,
 		actions: ['mirrorDarken', 'mirrorCapture'],
 		compliance: mkCompliance({
-			reflect: [AttackType.Fire, AttackType.Magic, AttackType.Psychic],
+			reflect: [AttackType.Fire, AttackType.Magic, AttackType.Psychic,
+								AttackType.Air],
 			vulnerable: [AttackType.Fight, AttackType.Ground],
 		}),
 	},

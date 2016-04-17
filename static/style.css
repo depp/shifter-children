@@ -1,0 +1,48 @@
+body {
+    background-color: #333;
+    color: #ccc;
+}
+#main {
+    width: 800px;
+    margin: 0 auto;
+}
+#main canvas {
+    width: 100%;
+}
+#version {
+    text-align: right;
+    font-size: 0.8rem;
+    color: #999;
+}
+#instructions {
+    width: 500px;
+    margin: 0 auto;
+}
+.controls span {
+    font-weight: bold;
+    margin-right: 0.5em;
+}
+ul {
+    list-style: none;
+    padding: 0;
+}
+a {
+    color: #ebdd75;
+    text-decoration: none;
+}
+a:visited {
+    color: #ff8521;
+}
+a:active {
+    color: #ffffff;
+}
+a:hover {
+    color: #fffad4;
+}
+#instructions {
+    margin-top: 8rem;
+}
+.error {
+    border: 1px solid #f66;
+    padding: 0.5rem;
+}

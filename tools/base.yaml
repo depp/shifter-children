@@ -1,0 +1,33 @@
+---
+configs:
+  - devel
+  - staging
+  - production
+server:
+  host: localhost
+  port: 8000
+default:
+  serve: devel
+  build: devel
+  package: staging
+  deploy: staging
+config:
+  base:
+    title: |
+      ${app_name}\
+      % if config != 'production':
+       (${config_name})\
+      % endif
+    js_header: |
+      ${app_name} ${version}
+      ${copyright}
+      ${github}
+  devel:
+    debug: true
+    config_name: Development
+  staging:
+    debug: false
+    config_name: Staging
+  production:
+    debug: false
+    config_name: Production
