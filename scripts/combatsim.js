@@ -7,6 +7,87 @@
 require('source-map-support').install();
 var sim = require('../build/tsc/game/combatsim');
 
+function dumpTable(fp, table) {
+	var i, j, shape, shapes, itable, pos, e;
+	fp.write(`\
+<!doctype html>
+<html>
+<head>
+<title>Combat Results</title>
+<style type="text/css">
+.win2 { background: #66f; }
+.win1 { background: #99f; }
+.even { background: #fff; }
+.stale { background: #999; }
+.lose1 { background: #f66; }
+.lose2 { background: #f66; }
+</style>
+</head>
+<body>
+<table>
+`);
+	shapes = [];
+	for (i = 0; i < table.length; i++) {
+		for (j = 1; j <= 2; j++) {
+			shape = table[i]['shape' + j];
+			if (shapes.indexOf(shape) < 0) {
+				shapes.push(shape);
+			}
+		}
+	}
+	itable = {};
+	for (i = 0; i < table.length; i++) {
+		e = table[i];
+		itable[e.shape1 + ',' + e.shape2] = e;
+	}
+	fp.write('<tr><th></th>');
+	for (i = 0; i < shapes.length; i++) {
+		fp.write('<th>' + shapes[i] + '</th>');
+	}
+	fp.write('</tr>\n');
+	for (i = 0; i < shapes.length; i++) {
+		fp.write('<tr><th>' + shapes[i] + '</th>');
+		for (j = 0; j < shapes.length; j++) {
+			e = itable[shapes[i] + ',' + shapes[j]];
+			if (!e) {
+				e = itable[shapes[j] + ',' + shapes[i]];
+				e = {
+					shape1: e.shape2,
+					shape2: e.shape1,
+					wins1: e.wins2,
+					wins2: e.wins1,
+					turns: e.turns,
+				};
+			}
+			var delta = e.wins1 - e.wins2;
+			var cls;
+			if (delta > 0.5) {
+				cls = 'win2';
+			} else if (delta > 0.25) {
+				cls = 'win1';
+			} else if (delta > -0.25) {
+				cls = 'even';
+				if (e.wins1 + e.wins2 < 0.5) {
+					cls = 'stale';
+				}
+			} else if (delta > -0.5) {
+				cls = 'lose1';
+			} else {
+				cls = 'lose2';
+			}
+			fp.write('<td class="' + cls + '">' +
+							 Math.floor(100 * e.wins1 + 0.5) + ' / ' +
+							 Math.floor(100 * e.wins2 + 0.5) +
+							 '</td>');
+		}
+		fp.write('</tr>\n');
+	}
+	fp.write(`\
+</table>
+</body>
+`);
+}
+
 function listen(type, evt) {
 	console.log(type, evt);
 }
@@ -25,11 +106,19 @@ var Commands = {
 			teamSize: 2,
 			count: itercount,
 		};
+		var results = [];
 		for (var i = 0; i < matches.length; i++) {
 			var match = matches[i];
 			match.run(param);
-			console.log(match);
+			results.push({
+				shape1: match.shape1,
+				shape2: match.shape2,
+				wins1: match.wins1 / itercount,
+				wins2: match.wins2 / itercount,
+				turns: match.turns / itercount,
+			});
 		}
+		dumpTable(process.stdout, results);
 	},
 	combat: function(shape1, shape2) {
 		var param = {

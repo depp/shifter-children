@@ -463,6 +463,7 @@ interface ShapeMap {
 }
 
 interface CMBuilder {
+	normal?: AttackType[];
 	immune?: AttackType[];
 	resist?: AttackType[];
 	vulnerable?: AttackType[];
@@ -482,6 +483,7 @@ function mkCompliance(info?: CMBuilder) {
 	}
 	add(Compliance.Absorb, [AttackType.Blessing]);
 	if (info) {
+		add(Compliance.Normal, info.normal);
 		add(Compliance.Immune, info.immune);
 		add(Compliance.Resist, info.resist);
 		add(Compliance.Vulnerable, info.vulnerable);
@@ -503,7 +505,7 @@ const Shapes: ShapeMap = {
 		actions: ['batBite', 'batScreech'],
 		compliance: mkCompliance({
 			resist: [AttackType.Ground],
-			vulnerable: [AttackType.Air],
+			vulnerable: [AttackType.Fight],
 		}),
 	},
 	stone: {
@@ -543,11 +545,15 @@ const Shapes: ShapeMap = {
 	},
 	unicorn: {
 		actions: ['unicornPurify', 'unicornAbjure'],
-		compliance: {},
+		compliance: mkCompliance({
+			absorb: [AttackType.Magic],
+		}),
 	},
 	glip: {
 		actions: ['glipMutate', 'glipLaugh'],
-		compliance: {},
+		compliance: mkCompliance({
+			normal: [AttackType.Blessing],
+		}),
 	},
 };
 
@@ -794,7 +800,7 @@ export class Actor {
 		this.health = newHealth;
 		// console.log('    damage: ' + damage);
 		combat.evtDamage({ actor: this.index, damage: damage });
-		return newHealth - oldHealth;
+		return oldHealth - newHealth;
 	}
 
 	// Add an effect to the actor.
