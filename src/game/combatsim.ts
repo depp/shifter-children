@@ -29,12 +29,13 @@ class Match {
 		this.shape2 = shape2;
 	}
 
-	run(param: SimParam) {
+	run(param: SimParam, listener?: combat.EvtHandler) {
 		var { health, speed, teamSize, count } = param;
 		var s1: combat.ActorSpec = { shape: this.shape1, health, speed };
 		var s2: combat.ActorSpec = { shape: this.shape2, health, speed };
 		for (var iter = 0; iter < count; iter++) {
 			var c = new combat.Combat();
+			c.listen(listener);
 			for (var i = 0; i < teamSize; i++) {
 				c.add(new combat.Actor(1, combat.Control.Computer, s1));
 			}

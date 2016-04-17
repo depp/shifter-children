@@ -79,6 +79,65 @@ type AttackCallback = (target: Actor, compliance: Compliance) => void;
 
 /*
  * ===========================================================================
+ * Events
+ * ===========================================================================
+ */
+
+// Actor took damage.
+export interface EvtDamage {
+	actor: number;
+	damage: number;
+}
+
+// Types of miscellaneous events.
+export type EvtMiscType
+	= 'fizzle' | 'immune' | 'reflect' | 'frightened' | 'confused';
+
+// Miscellaneous event occurred to an actor.
+export interface EvtActor {
+	actor: number;
+	type: EvtMiscType;
+}
+
+// Actor took action.
+export interface EvtAction {
+	actor: number;
+	action: string;
+}
+
+// Actor attacked one opponent.
+export interface EvtAttackOne {
+	actor: number;
+	target: number;
+}
+
+// Actor attacked a team or its complement.
+export interface EvtAttackTeam {
+	actor: number;
+	team: number;
+	invert: boolean;
+}
+
+// Actor status changed.
+export interface EvtStatus {
+	actor: number;
+	status: Status;
+}
+
+export type EvtType =
+	'damage' | 'actor' | 'action' |
+	'attackone' | 'attackteam' | 'status';
+
+export type EvtAny =
+	EvtDamage | EvtActor | EvtAction |
+	EvtAttackOne | EvtAttackTeam | EvtStatus;
+
+export interface EvtHandler {
+	(type: EvtType, evt: EvtAny): void;
+}
+
+/*
+ * ===========================================================================
  * Actions
  * ===========================================================================
  */
@@ -522,7 +581,7 @@ interface PersistentEffect {
 	// Time remaining on the effect.
 	time: number;
 	// Update the status effect.  Called once per frame.
-	update(actor: Actor): void;
+	update(combat: Combat, actor: Actor): void;
 	// Apply the status effect to the actor.  This must only modify the
 	// actor's ephemeral properties, to make sure that
 	// Actor.applyEffects() is idempotent.
@@ -533,7 +592,7 @@ interface PersistentEffect {
 class StatusEffect implements PersistentEffect {
 	constructor(private status: Status, public isHarmful: boolean,
 							public time: number) {}
-	update(actor: Actor): void {}
+	update(combat: Combat, actor: Actor): void {}
 	apply(actor: Actor): void {
 		actor.status |= this.status;
 	}
@@ -548,11 +607,12 @@ class DamageEffect implements PersistentEffect {
 		public time: number,
 		private type: AttackType,
 		private damage: number) {}
-	update(actor: Actor): void {
+	update(combat: Combat, actor: Actor): void {
 		this.tick++;
 		if (this.tick == DamageInterval) {
 			this.tick = 0;
 			actor.damage(
+				combat,
 				randomDamage(
 					adjustDamage(this.damage, actor.compliance(this.type))));
 		}
@@ -655,19 +715,19 @@ export class Actor {
 	}
 
 	// Update the actor state.
-	update(): void {
+	update(combat: Combat): void {
 		if (this.status & Status.Dead) {
 			return;
 		}
 		for (var i = 0, fxs = this.persistentEffects; i < fxs.length;) {
 			var fx = fxs[i];
-			fx.update(this);
+			fx.update(combat, this);
 			fx.time--;
 			if (fx.time <= 0) {
 				fxs.splice(i, 1);
 			}
 		}
-		this.applyEffects();
+		this.applyEffects(combat);
 		if ((this.status & Status.Dead) === 0) {
 			this.time -= this.speed;
 		} else {
@@ -678,7 +738,8 @@ export class Actor {
 	// Apply all active status effects to the actor and fix any
 	// properties that are out of range.  This is idempotent, it is
 	// called whenever something happens to the actor.
-	applyEffects(): void {
+	applyEffects(combat: Combat): void {
+		var oldStatus = this.status;
 		this.control = this.baseControl
 		this.team = this.baseTeam;
 		this.speed = this.baseSpeed;
@@ -697,6 +758,9 @@ export class Actor {
 		}
 		if (this.status & Status.Stun) {
 			this.speed = 0;
+		}
+		if (this.status != oldStatus) {
+			combat.evtStatus({ actor: this.index, status: this.status });
 		}
 	}
 
@@ -724,11 +788,12 @@ export class Actor {
 
 	// Damage the actor.  Return the actual amount of damage taken,
 	// excluding any "overkill".
-	damage(damage: number): number {
+	damage(combat: Combat, damage: number): number {
 		var oldHealth = this.health;
 		var newHealth = Math.max(0, Math.min(this.baseHealth, oldHealth - damage));
 		this.health = newHealth;
 		// console.log('    damage: ' + damage);
+		combat.evtDamage({ actor: this.index, damage: damage });
 		return newHealth - oldHealth;
 	}
 
@@ -817,7 +882,28 @@ export class Combat {
 	actors: Actor[] = [];
 	done: boolean = false;
 	teams: TeamCount = {};
+	private _handlers: EvtHandler[] = [];
 
+	listen(handler: EvtHandler) {
+		if (handler) {
+			this._handlers.push(handler);
+		}
+	}
+
+	// Broadcast an event.
+	private _evt(type: EvtType, evt: EvtAny): void {
+		for (var h of this._handlers) {
+			h(type, evt);
+		}
+	}
+	evtDamage(evt: EvtDamage): void { this._evt('damage', evt); }
+	evtActor(evt: EvtActor): void { this._evt('actor', evt); }
+	evtAction(evt: EvtAction): void { this._evt('action', evt); }
+	evtAttackOne(evt: EvtAttackOne): void { this._evt('attackone', evt); }
+	evtAttackTeam(evt: EvtAttackTeam): void { this._evt('attackteam', evt); }
+	evtStatus(evt: EvtStatus): void { this._evt('status', evt); }
+
+	// Add an actor to combat.
 	add(actor: Actor) {
 		actor.index = this.actors.length;
 		this.actors.push(actor);
@@ -827,10 +913,8 @@ export class Combat {
 
 	// Update one step of combat.
 	update(): void {
-		// console.log('---');
 		// Choose actions for any actors ready to choose an action.
 		for (var actor of this.actors) {
-			// console.log('Actor ' + actor.index + ' health=' + actor.health);
 			if (actor.isReady() && !actor.action) {
 				var rec: ActionRecord = null;
 				switch (actor.control) {
@@ -852,9 +936,9 @@ export class Combat {
 			if (actor.isReady() && actor.action) {
 				// Take a previously selected action.
 				var rec = actor.action;
-				// console.log('Action: ' + rec.actionName);
 				var action = rec.action;
 				actor.action = null;
+				this.evtAction({ actor: actor.index, action: rec.actionName });
 				if (action.act(this, rec)) {
 					actor.time = action.cooldown;
 				} else {
@@ -866,7 +950,7 @@ export class Combat {
 		}
 		if (!didAct) {
 			for (var actor of this.actors) {
-				actor.update();
+				actor.update(this);
 			}
 		}
 		// Check for the end of the battle.
@@ -906,7 +990,6 @@ export class Combat {
 			console.warn('Invalid action: ' + actName);
 			return null;
 		}
-		// console.log('Action: ' + actName);
 		var rec = new ActionRecord(actor, actName);
 		rec.isConfused = false;
 		rec.targetActor = null;
@@ -958,15 +1041,32 @@ export class Combat {
 	attack(rec: ActionRecord, spec: AttackSpec): boolean {
 		var source = rec.source;
 		var targets = this.getAttackTargets(rec);
-		// console.log('Attack');
 		if (!targets.length) {
-			// console.log('fizzle');
+			this.evtActor({ actor: source.index, type: 'fizzle' });
 			return false;
+		}
+		if (rec.action.targeting == Targeting.Multiple) {
+			this.evtAttackTeam({
+				actor: source.index,
+				team: rec.targetTeam,
+				invert: rec.targetInvert,
+			});
+		} else {
+			this.evtAttackOne({
+				actor: source.index,
+				target: targets[0].index,
+			});
+		}
+		if ((source.status & Status.Frighten) !== 0) {
+			if (Math.random() < 0.5) {
+				this.evtActor({ actor: source.index, type: 'frightened' });
+				return false;
+			}
 		}
 		for (var target of targets) {
 			var compliance = target.compliance(spec.type);
-			// console.log(Compliance[compliance]);
 			if (compliance === Compliance.Reflect) {
+				this.evtActor({ actor: target.index, type: 'reflect' });
 				target = randomUniform(
 					this.actors.filter((a: Actor) => a.baseTeam !== target.baseTeam));
 				if (!target) {
@@ -979,11 +1079,13 @@ export class Combat {
 				}
 			}
 			if (compliance == Compliance.Immune) {
+				this.evtActor({ actor: target.index, type: 'immune' });
 				continue;
 			}
 			var damage = 0;
 			if (typeof spec.damage === 'number') {
 				damage = target.damage(
+					this,
 					randomDamage(adjustDamage(spec.damage, compliance)));
 			}
 			var effect = spec.effect;
@@ -995,14 +1097,14 @@ export class Combat {
 				switch (effect) {
 				case 'drain':
 					if (source !== target && damage !== 0) {
-						source.damage(-damage);
-						source.applyEffects();
+						source.damage(this, -damage);
+						source.applyEffects(this);
 					}
 					break;
 				}
 				target.addEffect(effect, compliance);
 			}
-			target.applyEffects();
+			target.applyEffects(this);
 		}
 		return true;
 	}
