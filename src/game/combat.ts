@@ -246,7 +246,7 @@ const Actions: ActionMap = {
 			return combat.attack(rec, {
 				type: AttackType.Psychic,
 				effect: 'frighten',
-				// inaccurate: true,
+				inaccurate: true,
 			});
 		}
 	},
@@ -349,11 +349,12 @@ const Actions: ActionMap = {
 	airGale: {
 		targeting: Targeting.Multiple,
 		hostile: true,
-		time: 275,
-		cooldown: 500,
+		time: 400,
+		cooldown: 600,
 		act: function(combat: Combat, rec: ActionRecord): boolean {
 			return combat.attack(rec, {
 				type: AttackType.Air,
+				damage: 20,
 			});
 		}
 	},
@@ -361,7 +362,7 @@ const Actions: ActionMap = {
 		targeting: Targeting.Single,
 		hostile: true,
 		time: 350,
-		cooldown: 600,
+		cooldown: 700,
 		act: function(combat: Combat, rec: ActionRecord): boolean {
 			return combat.attack(rec, {
 				type: AttackType.Air,
@@ -460,6 +461,8 @@ interface Shape {
 	actions: string[];
 	// Compliance to different damage types.
 	compliance: ComplianceMap;
+	// Incoming damage is multiplied by this number.
+	defense: number;
 }
 
 interface ShapeMap {
@@ -500,6 +503,7 @@ function mkCompliance(info?: CMBuilder) {
 const Shapes: ShapeMap = {
 	were: {
 		actions: ['wereSlash', 'wereHowl'],
+		defense: 1,
 		compliance: mkCompliance({
 			resist: [AttackType.Psychic],
 			vulnerable: [AttackType.Fire],
@@ -507,13 +511,15 @@ const Shapes: ShapeMap = {
 	},
 	bat: {
 		actions: ['batBite', 'batScreech'],
+		defense: 1,
 		compliance: mkCompliance({
-			resist: [AttackType.Ground],
-			vulnerable: [AttackType.Fight],
+			immune: [AttackType.Ground],
+			vulnerable: [AttackType.Fight, AttackType.Air],
 		}),
 	},
 	stone: {
 		actions: ['stonePound', 'stoneStomp'],
+		defense: 1,
 		compliance: mkCompliance({
 			resist: [AttackType.Air],
 			vulnerable: [AttackType.Fire, AttackType.Magic],
@@ -521,6 +527,7 @@ const Shapes: ShapeMap = {
 	},
 	imp: {
 		actions: ['impBlast', 'impSmoke'],
+		defense: 1,
 		compliance: mkCompliance({
 			resist: [AttackType.Fight],
 			vulnerable: [AttackType.Psychic],
@@ -528,12 +535,16 @@ const Shapes: ShapeMap = {
 	},
 	air: {
 		actions: ['airGale', 'airToss'],
+		defense: 1,
 		compliance: mkCompliance({
-			resist: [AttackType.Ground, AttackType.Fight],
-			vulnerable: [AttackType.Air, AttackType.Magic],
+			immune: [AttackType.Ground],
+			resist: [AttackType.Fight],
+			vulnerable: [AttackType.Magic],
+			absorb: [AttackType.Air],
 		}),
 	},
 	mage: {
+		defense: 1.1,
 		actions: ['mageBolt', 'mageHaste'],
 		compliance: mkCompliance({
 			resist: [AttackType.Psychic],
@@ -541,6 +552,7 @@ const Shapes: ShapeMap = {
 		}),
 	},
 	mirror: {
+		defense: 1,
 		actions: ['mirrorDarken', 'mirrorCapture'],
 		compliance: mkCompliance({
 			reflect: [AttackType.Fire, AttackType.Magic, AttackType.Psychic],
@@ -548,6 +560,7 @@ const Shapes: ShapeMap = {
 		}),
 	},
 	unicorn: {
+		defense: 1,
 		actions: ['unicornPurify', 'unicornAbjure'],
 		compliance: mkCompliance({
 			absorb: [AttackType.Magic],
@@ -555,14 +568,16 @@ const Shapes: ShapeMap = {
 	},
 	glip: {
 		actions: ['glipMutate', 'glipLaugh'],
+		defense: 0.6,
 		compliance: mkCompliance({
-			normal: [AttackType.Blessing],
+			vulnerable: [AttackType.Blessing],
 		}),
 	},
 };
 
 const MissingShape: Shape = {
 	actions: [],
+	defense: 0,
 	compliance: {},
 };
 
@@ -629,10 +644,7 @@ class DamageEffect extends PersistentEffect {
 		this.tick++;
 		if (this.tick == DamageInterval) {
 			this.tick = 0;
-			actor.damage(
-				combat,
-				randomDamage(
-					adjustDamage(this.damage, actor.compliance(this.type))));
+			actor.damage(combat, this.damage, this.type);
 		}
 	}
 	apply(actor: Actor): void {
@@ -766,9 +778,7 @@ export class Actor {
 			// console.log('  IS DEAD: ' + this.index);
 		}
 		if (oldStatus & Status.Toss) {
-			this.damage(
-				combat,
-				randomDamage(adjustDamage(25, this.compliance(AttackType.Ground))));
+			this.damage(combat, 25, AttackType.Ground);
 		}
 	}
 
@@ -823,9 +833,56 @@ export class Actor {
 		return c;
 	}
 
+	// Damage the actor.  Return the actual amount of damage taken.  The
+	// damage is adjusted randomly as is standard for attacks.
+	damage(combat: Combat, damage: number, type: AttackType) {
+		var sign: number, magnitude: number;
+		if (damage < 0) {
+			sign = -1;
+			magnitude = -damage;
+		} else {
+			sign = +1;
+			magnitude = damage;
+		}
+
+		// Adjust based on compliance to that damage type.
+		switch (this.compliance(type)) {
+		case Compliance.Normal:
+		case Compliance.Reflect:
+			// Damage has already penetrated reflection.
+			break;
+		case Compliance.Resist:
+			magnitude *= 0.5;
+			break;
+		case Compliance.Vulnerable:
+			magnitude *= 2;
+			break;
+		case Compliance.Immune:
+			return 0;
+		case Compliance.Absorb:
+			sign = -sign;
+			return 0;
+		}
+
+		// Adjust based on defense score.
+		if (sign < 0) {
+			magnitude *= getShape(this.shape).defense;
+		}
+
+		// Adjust damage randomly.
+		var x0 = (magnitude * (2 / 3) + 0.5) | 0;
+		var x1 = (magnitude * (4 / 3) + 0.5) | 0;
+		magnitude = x0 + Math.floor((x1 - x0) * Math.random());
+
+		// Always at least one point of damage.
+		magnitude = Math.max(1, magnitude);
+
+		return this.damageRaw(combat, sign * magnitude);
+	}
+
 	// Damage the actor.  Return the actual amount of damage taken,
 	// excluding any "overkill".
-	damage(combat: Combat, damage: number): number {
+	damageRaw(combat: Combat, damage: number): number {
 		var oldHealth = this.health;
 		var newHealth = Math.max(0, Math.min(this.baseHealth, oldHealth - damage));
 		this.health = newHealth;
@@ -886,44 +943,6 @@ export class Actor {
 	isReady(): boolean {
 		return (this.status & Status.Dead) == 0 && this.time <= 0;
 	}
-}
-
-// Adjust damage according to target compliance.
-function adjustDamage(damage: number, compliance: Compliance) {
-	var sign: number, magnitude: number;
-	if (damage < 0) {
-		sign = -1;
-		magnitude = -damage;
-	} else {
-		sign = +1;
-		magnitude = damage;
-	}
-	switch (compliance) {
-	case Compliance.Normal:
-		break;
-	case Compliance.Resist:
-		magnitude *= 0.5;
-		break;
-	case Compliance.Vulnerable:
-		magnitude *= 2;
-		break;
-	case Compliance.Immune:
-		return 0;
-	case Compliance.Absorb:
-		sign = -sign;
-		return 0;
-	}
-	// console.log('    adjust: ' + sign + ' * ' + magnitude);
-	return sign * Math.max(1, magnitude | 0);
-}
-
-// Adjust damage randomly.
-function randomDamage(damage: number): number {
-	var x0 = damage * (2 / 3);
-	var x1 = damage * (4 / 3);
-	var base = Math.floor(Math.min(x0, x1) + 0.5);
-	var random = Math.floor(Math.max(x0, x1) + 0.5) - base;
-	return base + Math.max(random, Math.floor(Math.random() * (random + 1)));
 }
 
 /*
@@ -1158,9 +1177,7 @@ export class Combat {
 			}
 			var damage = 0;
 			if (typeof spec.damage === 'number') {
-				damage = target.damage(
-					this,
-					randomDamage(adjustDamage(spec.damage, compliance)));
+				damage = target.damage(this, spec.damage, spec.type);
 			}
 			var effect = spec.effect;
 			if (effect && !PersistentEffects.hasOwnProperty(effect)) {
@@ -1171,7 +1188,7 @@ export class Combat {
 				switch (effect) {
 				case 'drain':
 					if (source !== target && damage !== 0) {
-						source.damage(this, -damage);
+						source.damageRaw(this, -damage);
 						source.applyEffects(this);
 					}
 					break;

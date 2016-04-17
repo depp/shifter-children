@@ -15,12 +15,14 @@ function dumpTable(fp, table) {
 <head>
 <title>Combat Results</title>
 <style type="text/css">
-.win2 { background: #66f; }
-.win1 { background: #99f; }
+.win3 { background: #00f; }
+.win2 { background: #99f; }
+.win1 { background: #bbf; }
 .even { background: #fff; }
 .stale { background: #999; }
-.lose1 { background: #f66; }
-.lose2 { background: #f66; }
+.lose1 { background: #fbb; }
+.lose2 { background: #f99; }
+.lose3 { background: #f00; }
 </style>
 </head>
 <body>
@@ -61,7 +63,9 @@ function dumpTable(fp, table) {
 			}
 			var delta = e.wins1 - e.wins2;
 			var cls;
-			if (delta > 0.5) {
+			if (delta > 0.9) {
+				cls = 'win3';
+			} else if (delta > 0.5) {
 				cls = 'win2';
 			} else if (delta > 0.25) {
 				cls = 'win1';
@@ -72,12 +76,15 @@ function dumpTable(fp, table) {
 				}
 			} else if (delta > -0.5) {
 				cls = 'lose1';
-			} else {
+			} else if (delta > -0.9) {
 				cls = 'lose2';
+			} else {
+				cls = 'lose3';
 			}
 			fp.write('<td class="' + cls + '">' +
 							 Math.floor(100 * e.wins1 + 0.5) + ' / ' +
-							 Math.floor(100 * e.wins2 + 0.5) +
+							 Math.floor(100 * e.wins2 + 0.5) + '<br>' +
+							 Math.floor(e.turns / 15 + 0.5) +
 							 '</td>');
 		}
 		fp.write('</tr>\n');
