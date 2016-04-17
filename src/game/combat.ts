@@ -905,6 +905,10 @@ export class Combat {
 
 	// Add an actor to combat.
 	add(actor: Actor) {
+		if (!Shapes.hasOwnProperty(actor.shape)) {
+			console.warn('Invalid shape: ' + actor.shape);
+			return;
+		}
 		actor.index = this.actors.length;
 		this.actors.push(actor);
 		var n = this.teams[actor.baseTeam];

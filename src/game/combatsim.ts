@@ -12,10 +12,10 @@ interface SimParam {
 	health: number;
 	speed: number;
 	teamSize: number;
-	count: number;
+	count?: number;
 }
 
-class Match {
+export class Match {
 	shape1: string;
 	shape2: string;
 	wins1: number = 0;
@@ -30,7 +30,7 @@ class Match {
 	}
 
 	run(param: SimParam, listener?: combat.EvtHandler) {
-		var { health, speed, teamSize, count } = param;
+		var { health, speed, teamSize, count = 1 } = param;
 		var s1: combat.ActorSpec = { shape: this.shape1, health, speed };
 		var s2: combat.ActorSpec = { shape: this.shape2, health, speed };
 		for (var iter = 0; iter < count; iter++) {
@@ -40,7 +40,7 @@ class Match {
 				c.add(new combat.Actor(1, combat.Control.Computer, s1));
 			}
 			for (var i = 0; i < teamSize; i++) {
-				c.add(new combat.Actor(2, combat.Control.Computer, s1));
+				c.add(new combat.Actor(2, combat.Control.Computer, s2));
 			}
 			var turn = 0;
 			while (!c.done && turn < MaxTurns) {
