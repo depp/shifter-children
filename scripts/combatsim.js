@@ -1,3 +1,8 @@
+/* Copyright 2016 Dietrich Epp.
+
+   This file is part of Shifter Children.  The Shifter Children source
+   code is distributed under the terms of the MIT license.  See
+   LICENSE.txt for details. */
 'use strict';
 require('source-map-support').install();
 
