@@ -52,6 +52,8 @@ export enum Status {
 	Frighten    = 1 << 8,
 	Smoke       = 1 << 9,
 	Haste       = 1 << 10,
+	Control     = 1 << 11,
+	Toss        = 1 << 12,
 }
 
 const DamageInterval = 10;
@@ -91,7 +93,7 @@ export interface EvtDamage {
 
 // Types of miscellaneous events.
 export type EvtMiscType
-	= 'fizzle' | 'immune' | 'reflect' | 'frightened' | 'confused';
+	= 'fizzle' | 'immune' | 'reflect' | 'frightened' | 'confused' | 'miss';
 
 // Miscellaneous event occurred to an actor.
 export interface EvtActor {
@@ -194,6 +196,7 @@ interface AttackSpec {
 	type: AttackType;
 	effect?: string;
 	damage?: number;
+	inaccurate?: boolean;
 }
 
 const Actions: ActionMap = {
@@ -243,6 +246,7 @@ const Actions: ActionMap = {
 			return combat.attack(rec, {
 				type: AttackType.Psychic,
 				effect: 'frighten',
+				// inaccurate: true,
 			});
 		}
 	},
@@ -253,7 +257,7 @@ const Actions: ActionMap = {
 		cooldown: 600,
 		act: function(combat: Combat, rec: ActionRecord): boolean {
 			return combat.attack(rec, {
-				type: AttackType.Ground,
+				type: AttackType.Fight, // not ground... we can hit bats
 				damage: 30,
 				effect: 'stun',
 			});
@@ -279,7 +283,7 @@ const Actions: ActionMap = {
 		act: function(combat: Combat, rec: ActionRecord): boolean {
 			return combat.attack(rec, {
 				type: AttackType.Fire,
-				damage: 20,
+				damage: 5,
 				effect: 'burn',
 			});
 		}
@@ -539,7 +543,7 @@ const Shapes: ShapeMap = {
 	mirror: {
 		actions: ['mirrorDarken', 'mirrorCapture'],
 		compliance: mkCompliance({
-			resist: [AttackType.Fire, AttackType.Magic, AttackType.Psychic],
+			reflect: [AttackType.Fire, AttackType.Magic, AttackType.Psychic],
 			vulnerable: [AttackType.Fight, AttackType.Ground],
 		}),
 	},
@@ -581,38 +585,46 @@ ShapeNames.sort();
  */
 
 // An active persistent effect on an actor.
-interface PersistentEffect {
+abstract class PersistentEffect {
+	// The name of the effect.
+	name: string;
 	// Whether the effect is harmful.
 	isHarmful: boolean;
 	// Time remaining on the effect.
 	time: number;
+	constructor(isHarmful: boolean, time: number) {
+		this.isHarmful = isHarmful;
+		this.time = time;
+	}
 	// Update the status effect.  Called once per frame.
-	update(combat: Combat, actor: Actor): void;
+	update(combat: Combat, actor: Actor): void {}
 	// Apply the status effect to the actor.  This must only modify the
 	// actor's ephemeral properties, to make sure that
 	// Actor.applyEffects() is idempotent.
-	apply(actor: Actor): void;
+	abstract apply(actor: Actor): void;
 }
 
 // A persistent effect which applies a status flag.
-class StatusEffect implements PersistentEffect {
-	constructor(private status: Status, public isHarmful: boolean,
-							public time: number) {}
-	update(combat: Combat, actor: Actor): void {}
+class StatusEffect extends PersistentEffect {
+	constructor(private status: Status, isHarmful: boolean, time: number) {
+		super(isHarmful, time);
+	}
 	apply(actor: Actor): void {
 		actor.status |= this.status;
 	}
 }
 
 // A persistent effect which periodically damages the target.
-class DamageEffect implements PersistentEffect {
+class DamageEffect extends PersistentEffect {
 	private tick: number = 0;
 	constructor(
 		private status: Status,
 		public isHarmful: boolean,
 		public time: number,
 		private type: AttackType,
-		private damage: number) {}
+		private damage: number) {
+		super(isHarmful, time);
+	}
 	update(combat: Combat, actor: Actor): void {
 		this.tick++;
 		if (this.tick == DamageInterval) {
@@ -628,8 +640,20 @@ class DamageEffect implements PersistentEffect {
 	}
 }
 
+class ControlEffect extends PersistentEffect {
+	constructor(private team: number, private control: Control) {
+		super(true, 25);
+	}
+	update(combat: Combat, actor: Actor): void {}
+	apply(actor: Actor): void {
+		actor.status |= Status.Control;
+		actor.control = this.control;
+		actor.team = this.team;
+	}
+};
+
 interface PersistentEffectType {
-	(): PersistentEffect;
+	(s: Actor): PersistentEffect;
 }
 
 interface PersistentEffectMap {
@@ -637,18 +661,19 @@ interface PersistentEffectMap {
 }
 
 const PersistentEffects: PersistentEffectMap = {
-	attackUp: () => new StatusEffect(Status.AttackUp, false, 20),
-	darken: () => new StatusEffect(Status.Darken, true, 20),
+	attackUp: (s: Actor) => new StatusEffect(Status.AttackUp, false, 20),
+	darken: (s: Actor) => new StatusEffect(Status.Darken, true, 20),
 	drain: null,
-	frighten: () => new StatusEffect(Status.Frighten, true, 20),
-	confuse: () => new StatusEffect(Status.Confuse, true, 20),
-	stun: () => new StatusEffect(Status.Stun, true, 5),
-	burn: () => new DamageEffect(Status.Burn, true, 20, AttackType.Fire, 5),
-	smoke: () => new StatusEffect(Status.Smoke, false, 20),
-	haste: () => new StatusEffect(Status.Haste, false, 20),
-	toss: null,
-	control: null,
-	abjure: null,
+	frighten: (s: Actor) => new StatusEffect(Status.Frighten, true, 20),
+	confuse: (s: Actor) => new StatusEffect(Status.Confuse, true, 20),
+	stun: (s: Actor) => new StatusEffect(Status.Stun, true, 5),
+	burn: (s: Actor) =>
+		new DamageEffect(Status.Burn, true, 20, AttackType.Fire, 5),
+	smoke: (s: Actor) => new StatusEffect(Status.Smoke, false, 20),
+	haste: (s: Actor) => new StatusEffect(Status.Haste, false, 20),
+	toss: (s: Actor) => new StatusEffect(Status.Toss, true, 10),
+	control: (s: Actor) => new ControlEffect(s.team, s.control),
+	abjure: (s: Actor) => new StatusEffect(Status.Abjure, false, 30),
 };
 
 /*
@@ -733,11 +758,17 @@ export class Actor {
 				fxs.splice(i, 1);
 			}
 		}
+		var oldStatus = this.status;
 		this.applyEffects(combat);
 		if ((this.status & Status.Dead) === 0) {
 			this.time -= this.speed;
 		} else {
 			// console.log('  IS DEAD: ' + this.index);
+		}
+		if (oldStatus & Status.Toss) {
+			this.damage(
+				combat,
+				randomDamage(adjustDamage(25, this.compliance(AttackType.Ground))));
 		}
 	}
 
@@ -804,24 +835,46 @@ export class Actor {
 	}
 
 	// Add an effect to the actor.
-	addEffect(effect: string, compliance: Compliance): void {
+	addEffect(source: Actor, effect: string, compliance: Compliance): void {
 		var factory = PersistentEffects[effect];
 		if (!factory) {
 			return;
 		}
-		var fx = factory();
+		var fx = factory(source);
 		if (fx.isHarmful && (this.status & Status.Abjure)) {
 			return;
 		}
 		switch (compliance) {
 		case Compliance.Immune:
-		case Compliance.Resist:
 			return;
+		case Compliance.Resist:
+			if (fx.isHarmful) {
+				return;
+			}
+			break;
 		case Compliance.Vulnerable:
 			fx.time *= 2;
 			break;
 		}
-		this.persistentEffects.push(fx);
+		var fxs = this.persistentEffects;
+		for (var i = 0; i < fxs.length;) {
+			var ofx = fxs[i];
+			if (ofx.name === fx.name) {
+				fxs.splice(i, 1);
+				fx.time = Math.max(ofx.time, fx.time);
+				break;
+			}
+		}
+		if (effect == 'abjure') {
+			for (var i = 0; i < fxs.length;) {
+				if (fxs[i].isHarmful) {
+					fxs.splice(i, 1);
+				} else {
+					i++;
+				}
+			}
+		}
+		fxs.push(fx);
 	}
 
 	// Test whether the actor is a valid attack target.
@@ -1003,8 +1056,11 @@ export class Combat {
 		var rec = new ActionRecord(actor, actName);
 		rec.isConfused = false;
 		rec.targetActor = null;
-		rec.targetTeam = actor.team;
+		rec.targetTeam = actor.baseTeam;
 		rec.targetInvert = rec.action.hostile;
+		if (actor.team !== actor.baseTeam) {
+			rec.targetInvert = !rec.targetInvert;
+		}
 		return rec;
 	}
 
@@ -1074,6 +1130,14 @@ export class Combat {
 			}
 		}
 		for (var target of targets) {
+			if (spec.inaccurate && Math.random() < 0.5) {
+				this.evtActor({ actor: target.index, type: 'miss' });
+				continue;
+			}
+			if ((target.status & Status.Smoke) && Math.random() < 0.5) {
+				this.evtActor({ actor: target.index, type: 'miss' });
+				continue;
+			}
 			var compliance = target.compliance(spec.type);
 			if (compliance === Compliance.Reflect) {
 				this.evtActor({ actor: target.index, type: 'reflect' });
@@ -1112,7 +1176,7 @@ export class Combat {
 					}
 					break;
 				}
-				target.addEffect(effect, compliance);
+				target.addEffect(source, effect, compliance);
 			}
 			target.applyEffects(this);
 		}
