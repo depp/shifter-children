@@ -1,0 +1,7 @@
+{
+  "ambientDependencies": {
+    "gl-matrix": "registry:dt/gl-matrix#2.2.2+20160317120654",
+    "howler": "registry:dt/howler#1.1.29+20160316155526",
+    "lodash": "registry:dt/lodash#3.10.0+20160330154726"
+  }
+}
