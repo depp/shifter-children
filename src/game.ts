@@ -4,26 +4,16 @@
    code is distributed under the terms of the MIT license.
    See LICENSE.txt for details. */
 
+import * as camera from './camera';
 import * as control from './control';
 import * as load from './load';
 import * as param from './param';
+import * as sprite from './sprite';
 import * as state from './state';
 import * as text from './text';
 import * as time from './time';
 
 const MobyDick = 'Sample Text Here';
-
-var camera = (function() {
-	var tr = <Float32Array> vec3.fromValues(
-			-param.Width / 2, -param.Height / 2, 0);
-	var fovY = param.Height, fovX = param.Width; // use aspect
-	var pr = <Float32Array> mat4.create();
-	pr[0] = 2 / fovX;
-	pr[5] = 2 / fovY;
-	var mvp = <Float32Array> mat4.create();
-	mat4.translate(mvp, pr, tr);
-	return { uiMVP: mvp };
-})();
 
 /*
  * Main game screen.
@@ -96,7 +86,7 @@ export class GameScreen implements state.Screen, time.TimeTarget {
 		gl.clearColor(0.0, 0.0, 0.0, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 
-		text.ui.render(gl, camera);
+		text.ui.render(gl, camera.camera);
 	}
 
 	/*

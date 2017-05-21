@@ -1,8 +1,8 @@
 ---
 Sprite:
-  vert: plain
-  frag: plain
-  attributes: Pos Color
+  vert: sprite
+  frag: sprite
+  attributes: Pos Color0 Color1 Color2 Color3
 LoadScreen:
   vert: fullscreen
   frag: loading_bg
@@ -10,8 +10,4 @@ LoadScreen:
 Text:
   vert: text
   frag: text
-  attributes: Pos TexCoord Color
-Tile:
-  vert: tile
-  frag: tile
-  attributes: Pos TexCoord
+  attributes: Pos TexCoord Style
